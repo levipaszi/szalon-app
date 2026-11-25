@@ -8,12 +8,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
 const FIREBASE_SW_CONFIG = {
-  apiKey: 'IDE_ILLESZD_A_FIREBASE_API_KEYT',
-  authDomain: 'IDE_ILLESZD_AZ_AUTH_DOMAINT',
-  projectId: 'IDE_ILLESZD_A_PROJECT_ID_T',
-  storageBucket: 'IDE_ILLESZD_A_STORAGE_BUCKETET',
-  messagingSenderId: 'IDE_ILLESZD_A_MESSAGING_SENDER_ID_T',
-  appId: 'IDE_ILLESZD_AZ_APP_ID_T'
+  apiKey: 'AIzaSyCWBtRZiNMzDgbRoRWa22E-FZv8CDBFEDY',
+  authDomain: 'szalon-app-1d656.firebaseapp.com',
+  projectId: 'szalon-app-1d656',
+  storageBucket: 'szalon-app-1d656.firebasestorage.app',
+  messagingSenderId: '49793984267',
+  appId: '1:49793984267:web:664ce0fb23bc060888e40e'
 };
 
 const isConfigured =
