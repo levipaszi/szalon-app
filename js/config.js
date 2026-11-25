@@ -1,7 +1,5 @@
 /* ==========================================================================
    KÖZPONTI BEÁLLÍTÁSOK – js/config.js
-   Üzembe helyezéskor csak az alábbi kijelölt sorokba kell beillesztened
-   a saját Firebase és Google Apps Script kulcsaidat!
    ========================================================================== */
 
 window.APP_CONFIG = {
@@ -12,7 +10,6 @@ window.APP_CONFIG = {
   SOS_MULTIPLIER: 4,
 
   // 2. Firebase Web App konfiguráció
-  // (Firebase Console -> Project Settings -> Your apps -> Web app -> firebaseConfig)
   FIREBASE: {
     apiKey: 'AIzaSyCWBtRZiNMzDgbRoRWa22E-FZv8CDBFEDY',
     authDomain: 'szalon-app-1d656.firebaseapp.com',
@@ -23,13 +20,12 @@ window.APP_CONFIG = {
   },
 
   // 3. Firebase Cloud Messaging (FCM) Web Push VAPID kulcs
-  // (Firebase Console -> Project Settings -> Cloud Messaging -> Web Push certificates -> Key pair)
   VAPID_KEY: 'BL0mlEYnHWaMz1XT0CrHRqNcI5-O-OuQiPKg8QwyaiDCd6JrwGMFTnFvV5QCmyQB4IcgM0acO4IZd-8KIx_nlz4',
 
-  // 4. Google Apps Script Web App URL (Deploy -> Web app URL)
+  // 4. Google Apps Script Web App URL
   APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbyJTaNMzQ5rB5NAZSHIm0QdEb0t8yNlmc8cdcu-Ey3y4gJ9Ihz1olOeuzEKvK-0Kbft/exec',
 
-  // 5. Közös biztonsági kulcs az Apps Script push hívásokhoz (ugyanezt írd a Code.gs-be is!)
+  // 5. Közös biztonsági kulcs az Apps Script push hívásokhoz
   BRIDGE_SECRET: 'At3l1er_Sz4l0n_Br1dg3_9f4e2a7c8b1d',
 
   // Alapértelmezett árlista (az Admin felületen bármikor szabadon szerkeszthető)
