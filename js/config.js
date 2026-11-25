@@ -14,23 +14,23 @@ window.APP_CONFIG = {
   // 2. Firebase Web App konfiguráció
   // (Firebase Console -> Project Settings -> Your apps -> Web app -> firebaseConfig)
   FIREBASE: {
-    apiKey: 'IDE_ILLESZD_A_FIREBASE_API_KEYT',
-    authDomain: 'IDE_ILLESZD_AZ_AUTH_DOMAINT',
-    projectId: 'IDE_ILLESZD_A_PROJECT_ID_T',
-    storageBucket: 'IDE_ILLESZD_A_STORAGE_BUCKETET',
-    messagingSenderId: 'IDE_ILLESZD_A_MESSAGING_SENDER_ID_T',
-    appId: 'IDE_ILLESZD_AZ_APP_ID_T'
+    apiKey: 'AIzaSyCWBtRZiNMzDgbRoRWa22E-FZv8CDBFEDY',
+    authDomain: 'szalon-app-1d656.firebaseapp.com',
+    projectId: 'szalon-app-1d656',
+    storageBucket: 'szalon-app-1d656.firebasestorage.app',
+    messagingSenderId: '49793984267',
+    appId: '1:49793984267:web:664ce0fb23bc060888e40e'
   },
 
   // 3. Firebase Cloud Messaging (FCM) Web Push VAPID kulcs
   // (Firebase Console -> Project Settings -> Cloud Messaging -> Web Push certificates -> Key pair)
-  VAPID_KEY: 'IDE_ILLESZD_A_VAPID_KULCSOT',
+  VAPID_KEY: 'BL0mlEYnHWaMz1XT0CrHRqNcI5-O-OuQiPKg8QwyaiDCd6JrwGMFTnFvV5QCmyQB4IcgM0acO4IZd-8KIx_nlz4',
 
   // 4. Google Apps Script Web App URL (Deploy -> Web app URL)
-  APPS_SCRIPT_URL: 'IDE_ILLESZD_AZ_APPS_SCRIPT_WEB_APP_URL_T',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbyJTaNMzQ5rB5NAZSHIm0QdEb0t8yNlmc8cdcu-Ey3y4gJ9Ihz1olOeuzEKvK-0Kbft/exec',
 
   // 5. Közös biztonsági kulcs az Apps Script push hívásokhoz (ugyanezt írd a Code.gs-be is!)
-  BRIDGE_SECRET: 'CSERELD_LE_EGY_SAJAT_TITKOS_JELSZORA_2026',
+  BRIDGE_SECRET: 'At3l1er_Sz4l0n_Br1dg3_9f4e2a7c8b1d',
 
   // Alapértelmezett árlista (az Admin felületen bármikor szabadon szerkeszthető)
   DEFAULT_PRICING: {
