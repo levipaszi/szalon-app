@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="hu" data-theme="male">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Atelier Szalon – VIP Vendég</title>
+  <meta name="description" content="Személyre szabott fodrászati időpontok, hajápolási tanácsadó és VIP villám-időpontok." />
+  <meta name="theme-color" content="#0F1012" id="metaThemeColor" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Atelier VIP" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./icons/guest-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icons/guest-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/styles.css" />
+  <script>
+    if (new URLSearchParams(window.location.search).get('admin') === '1') {
+      window.location.replace('./admin.html');
+    }
+  </script>
+</head>
+<body>
+  <!-- Fejléc -->
+  <header class="app-header">
+    <div class="app-header-inner">
+      <div class="brand-wrap">
+        <span class="brand-title" id="salonBrandTitle">Atelier Szalon</span>
+        <span class="brand-subtitle" id="guestGreeting">Üdvözöllek!</span>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="openThemeBtn" type="button" aria-label="Téma és profil">
+          <span id="themeBadgeIcon">✦</span>
+          <span>Stílus</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <!-- Demo / Push értesítés sáv (csak szükség esetén jelenik meg) -->
+    <div id="demoBanner" class="top-banner demo-banner hidden">
+      <span><strong>Előnézeti mód:</strong> helyi próbaadatokkal fut (Firebase beállítás után élőben szinkronizál).</span>
+      <button class="btn btn-sm btn-ghost" id="closeDemoBanner" type="button">OK</button>
+    </div>
+
+    <div id="pushBanner" class="top-banner hidden">
+      <span>Kapcsold be az értesítéseket a 24 órás és 1 órás emlékeztetőkhöz!</span>
+      <button class="btn btn-sm btn-primary" id="enablePushBtn" type="button">Bekapcsolás</button>
+    </div>
+
+    <!-- ==================== 1. FŐOLDAL FÜL ==================== -->
+    <section id="tab-home" class="tab-section active" aria-label="Főoldal">
+      <!-- Frizura-állapot % kártya -->
+      <div class="card health-card">
+        <div class="health-ring-wrap">
+          <svg class="health-ring" viewBox="0 0 112 112" aria-hidden="true">
+            <circle class="health-ring-bg" cx="56" cy="56" r="46"></circle>
+            <circle class="health-ring-progress" id="healthRingCircle" cx="56" cy="56" r="46"></circle>
+          </svg>
+          <div class="health-ring-center">
+            <span class="health-percent" id="healthPercentText">--%</span>
+            <span class="health-label">Frizura</span>
+          </div>
+        </div>
+        <div class="health-info">
+          <div class="card-eyebrow">Frizura-állapot</div>
+          <h2 id="healthHeadline">Számolás...</h2>
+          <p class="health-meta" id="healthMeta">Az utolsó látogatásod alapján.</p>
+        </div>
+      </div>
+
+      <!-- Következő időpont kiemelt kártya -->
+      <div class="card card-accent" id="nextApptCard">
+        <div class="row-between">
+          <div class="card-eyebrow">Következő időpontod</div>
+          <span class="badge badge-accent" id="syncStatusBadge">Élő naptár</span>
+        </div>
+        <div id="nextApptContent">
+          <p class="muted mt-1">Időpontok betöltése...</p>
+        </div>
+
+        <!-- Időpont napján megjelenő 10 perc késés gomb -->
+        <div id="lateNoticeWrap" class="hidden mt-2">
+          <button class="btn btn-danger btn-block" id="late10Btn" type="button">
+            ⏱️ Késni fogok 10 percet
+          </button>
+          <p class="small muted mt-1" id="lateNoticeStatus"></p>
+        </div>
+
+        <!-- Progressive Disclosure: Összes jövőbeli időpont évszámos bontásban -->
+        <div class="disclosure" id="allApptsDisclosure">
+          <button class="disclosure-trigger" type="button" data-disclosure="allApptsDisclosure">
+            <span id="allApptsTitle">Összes lefoglalt időpontom (0)</span>
+            <span class="disclosure-chevron">▾</span>
+          </button>
+          <div class="disclosure-body" id="allApptsBody">
+            <p class="muted">Nincs további előjegyzett időpont.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Check-in kártya (Hangulat & Frissítő a következő alkalomra) -->
+      <div class="card" id="checkinCard">
+        <div class="card-eyebrow">Check-in a következő alkalomra</div>
+        <h2 class="card-title">Hogyan érkezel legközelebb?</h2>
+
+        <div class="mt-2">
+          <span class="form-label">Hangulat</span>
+          <div class="choice-grid" id="moodChoices">
+            <button class="choice-btn" type="button" data-mood="Beszélgessünk">
+              <span class="choice-icon">💬</span>
+              <span>Beszélgessünk</span>
+            </button>
+            <button class="choice-btn" type="button" data-mood="Ma csendes alkalmat kérek">
+              <span class="choice-icon">🌿</span>
+              <span>Ma csendes alkalmat kérek</span>
+            </button>
+            <button class="choice-btn" type="button" data-mood="Sietek, csak a lényegre">
+              <span class="choice-icon">⚡</span>
+              <span>Sietek, csak a lényegre</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-2">
+          <span class="form-label">Frissítő</span>
+          <div class="choice-grid" id="drinkChoices">
+            <button class="choice-btn" type="button" data-drink="Eszpresszót kérek">
+              <span class="choice-icon">☕</span>
+              <span>Eszpresszót kérek</span>
+            </button>
+            <button class="choice-btn" type="button" data-drink="Teát kérek">
+              <span class="choice-icon">🍵</span>
+              <span>Teát kérek</span>
+            </button>
+            <button class="choice-btn" type="button" data-drink="Most nem kérek">
+              <span class="choice-icon">💧</span>
+              <span>Most nem kérek</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Progressive Disclosure: Inspirációs fotó feltöltése -->
+        <div class="disclosure mt-2" id="photoDisclosure">
+          <button class="disclosure-trigger" type="button" data-disclosure="photoDisclosure">
+            <span>📸 Inspirációs fotó küldése (opcionális)</span>
+            <span class="disclosure-chevron">▾</span>
+          </button>
+          <div class="disclosure-body">
+            <p class="muted small">Tölts fel egy képet az elképzelésedről, hogy a fodrászod már érkezés előtt lássa.</p>
+            <div class="form-group mt-2">
+              <input class="input" type="file" id="inspoPhotoInput" accept="image/*" />
+              <img id="inspoPhotoPreview" class="photo-preview hidden" alt="Inspirációs fotó előnézet" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="inspoPhotoNote">Rövid megjegyzés a képhez</label>
+              <textarea class="textarea" id="inspoPhotoNote" placeholder="Pl. ilyen hosszra gondoltam, elöl kicsit lépcsőzve..."></textarea>
+            </div>
+            <button class="btn btn-primary btn-block" id="saveInspoBtn" type="button">Inspiráció mentése</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 2. HAJÁPOLÁS FÜL ==================== -->
+    <section id="tab-haircare" class="tab-section" aria-label="Hajápolás">
+      <div class="section-heading">
+        <h1>Trichológiai Hajápolás</h1>
+        <p>Bizonyítékokon alapuló, személyre szabott otthoni protokoll – lépésről lépésre.</p>
+      </div>
+
+      <div id="haircareRoot"></div>
+    </section>
+
+    <!-- ==================== 3. IDŐPONTOK FÜL ==================== -->
+    <section id="tab-appointments" class="tab-section" aria-label="Időpontok">
+      <div class="section-heading">
+        <h1>VIP Villám-időpontok</h1>
+        <p>Ha felszabadul egy váratlan hely, értesítünk és egy érintéssel jelentkezhetsz rá.</p>
+      </div>
+
+      <!-- VIP Villám feliratkozás kártya -->
+      <div class="card">
+        <div class="switch-row">
+          <div>
+            <strong>Villám-időpont riasztások</strong>
+            <p class="muted small">Értesíts, ha felszabadul egy alkalom.</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="flashSubToggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div id="flashPrefWrap" class="mt-2 hidden">
+          <span class="form-label">Melyik napszak jó neked?</span>
+          <div class="chip-row" id="flashPrefChips">
+            <button class="chip" type="button" data-pref="morning">Délelőtt</button>
+            <button class="chip" type="button" data-pref="afternoon">Délután</button>
+            <button class="chip" type="button" data-pref="any">Bármikor</button>
+          </div>
+
+          <div class="switch-row mt-2">
+            <div>
+              <strong>Sürgősen előbbre hoznám</strong>
+              <p class="muted small">Kiemelten jelzi a fodrászodnak a jelentkezésnél.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="urgentEarlierToggle" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aktív Villám-ajánlatok -->
+      <div id="flashOffersContainer"></div>
+
+      <!-- SOS státusz (ha van folyamatban lévő vagy megválaszolt kérés) -->
+      <div id="sosStatusContainer"></div>
+
+      <!-- SOS Vészhelyzeti szekció – alapállapotban CSAK a piros gomb látszik! -->
+      <div class="sos-container">
+        <button class="btn btn-danger btn-block" id="sosToggleBtn" type="button">
+          SOS időpont (4x ár) – Csak végszükség esetén!
+        </button>
+
+        <div id="sosPanel" class="sos-panel hidden">
+          <div class="sos-notice">
+            Ez a lehetőség kifejezetten rendkívüli, halaszthatatlan vészhelyzetekre készült, amikor mindenképpen időpontra van szükséged, de a naptárban már nincs szabad hely. Mivel egy ilyen alkalmat kizárólag a pihenőidőm és a szabadnapjaim terhére tudok vállalni, a szolgáltatás díja 4-szeres árszorzóval számolódik. A kérés elküldése után megnézem, hogy a körülmények engedik-e a beiktatást – csak akkor vállalom el, ha valóban kivitelezhető.
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="sosServiceSelect">1. Kívánt szolgáltatás kiválasztása</label>
+            <select class="select" id="sosServiceSelect"></select>
+          </div>
+
+          <div class="sos-price-highlight">
+            <div>
+              <div class="small muted">4-szeres SOS díj</div>
+              <div class="small muted" id="sosBasePriceHint">Alapár: –</div>
+            </div>
+            <div class="sos-price-amount" id="sosCalculatedPrice">– Ft</div>
+          </div>
+
+          <div class="form-group">
+            <span class="form-label">2. Mikor lenne jó? (Gyorsválasztó)</span>
+            <div class="chip-row" id="sosQuickInterval">
+              <button class="chip" type="button" data-quick="Csak ma">Csak ma</button>
+              <button class="chip" type="button" data-quick="Holnap">Holnap</button>
+              <button class="chip" type="button" data-quick="Ezen a héten bármikor">Ezen a héten bármikor</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <span class="form-label">Vagy válassz konkrét napokat (több is jelölhető):</span>
+            <div class="chip-row" id="sosDayChips">
+              <button class="chip" type="button" data-day="Hétfő">Hétfő</button>
+              <button class="chip" type="button" data-day="Kedd">Kedd</button>
+              <button class="chip" type="button" data-day="Szerda">Szerda</button>
+              <button class="chip" type="button" data-day="Csütörtök">Csütörtök</button>
+              <button class="chip" type="button" data-day="Péntek">Péntek</button>
+              <button class="chip" type="button" data-day="Szombat">Szombat</button>
+              <button class="chip" type="button" data-day="Vasárnap">Vasárnap</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="sosNoteInput">Rövid megjegyzés (pl. pontos napszak, alkalom)</label>
+            <textarea class="textarea" id="sosNoteInput" placeholder="Pl. péntek 17 óra után bármikor jó, esküvő miatt sürgős..."></textarea>
+          </div>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="sosAcceptCheckbox" />
+            <span>Megértettem és elfogadom a 4-szeres árszorzót, valamint azt, hogy ez egy esetleges vészhelyzeti kérés, amelyet csak akkor tudsz beiktatni, ha a körülmények engedik.</span>
+          </label>
+
+          <button class="btn btn-danger btn-block" id="sosSubmitBtn" type="button">
+            SOS kérés elküldése
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 4. ÁRLISTA FÜL ==================== -->
+    <section id="tab-pricing" class="tab-section" aria-label="Árlista">
+      <div class="section-heading">
+        <h1>Szalon Árlista</h1>
+        <p>Átlátható, aktuális és előre tervezhető árak.</p>
+      </div>
+
+      <div class="segmented-control" role="tablist">
+        <button class="segmented-btn active" id="priceTabCurrent" type="button" role="tab" aria-selected="true">
+          Aktuális árlista
+        </button>
+        <button class="segmented-btn" id="priceTabUpcoming" type="button" role="tab" aria-selected="false">
+          Várható árlista
+        </button>
+      </div>
+
+      <div id="pricingListContainer"></div>
+
+      <div class="kids-info-card mt-2" id="kidsPricingNote">
+        A gyerek nyírás iskolás korig ingyenes, onnantól a fenti árak érvényesek.
+      </div>
+    </section>
+  </main>
+
+  <!-- Fix 4 füles alsó navigációs sáv -->
+  <nav class="bottom-nav" aria-label="Fő navigáció">
+    <div class="bottom-nav-inner">
+      <button class="nav-item active" type="button" data-tab="home">
+        <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5.5v-6.5h-5V21H4a1 1 0 0 1-1-1z"/></svg>
+        <span>Főoldal</span>
+      </button>
+      <button class="nav-item" type="button" data-tab="haircare">
+        <svg viewBox="0 0 24 24"><path d="M12 2.5c3.5 4.2 6 7.4 6 11a6 6 0 1 1-12 0c0-3.6 2.5-6.8 6-11z"/></svg>
+        <span>Hajápolás</span>
+      </button>
+      <button class="nav-item" type="button" data-tab="appointments">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="m13 13-2 4h3l-1 3"/></svg>
+        <span>Időpontok</span>
+        <span class="nav-dot hidden" id="apptNavDot"></span>
+      </button>
+      <button class="nav-item" type="button" data-tab="pricing">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/><circle cx="18" cy="17" r="2"/></svg>
+        <span>Árlista</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Első indítás: Onboarding képernyő -->
+  <div id="onboardingOverlay" class="fullscreen-overlay hidden">
+    <div class="overlay-card">
+      <div class="card-eyebrow">VIP Vendégbelépés</div>
+      <h1 style="font-size:1.65rem;margin-bottom:6px;" id="onboardingTitle">Atelier Szalon</h1>
+      <p class="muted">Egyszeri, jelszó nélküli bejelentkezés. Add meg a neved és válaszd ki a hozzád illő stílust!</p>
+
+      <div class="form-group mt-3">
+        <label class="form-label" for="onboardingName">Teljes neved</label>
+        <input class="input" id="onboardingName" type="text" placeholder="Pl. Kovács Anna vagy Szabó Bence" autocomplete="name" />
+      </div>
+
+      <span class="form-label">Válassz megjelenési módot</span>
+      <div class="theme-preview-grid" id="onboardingThemes">
+        <button class="theme-card selected" type="button" data-theme-choice="male">
+          <span class="theme-swatch swatch-male"></span>
+          <div>
+            <strong>Férfi – Barber &amp; Obsidian</strong>
+            <div class="small muted">Mély antracit, réz/bronz és hideg ezüst kiemelések, szakáll- és rövid haj ápolással.</div>
+          </div>
+        </button>
+        <button class="theme-card" type="button" data-theme-choice="female-light">
+          <span class="theme-swatch swatch-female-light"></span>
+          <div>
+            <strong>Női – Világos Selyem</strong>
+            <div class="small muted">Pezsgő-alabástrom háttér, rózsaarany részletek, elegáns szerkesztőségi stílus.</div>
+          </div>
+        </button>
+        <button class="theme-card" type="button" data-theme-choice="female-dark">
+          <span class="theme-swatch swatch-female-dark"></span>
+          <div>
+            <strong>Női – Sötét Bársony</strong>
+            <div class="small muted">Mély szilva-burgundi bársony háttér, meleg pezsgőarany kiemelések.</div>
+          </div>
+        </button>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="onboardingSubmitBtn" type="button">
+        Belépés az alkalmazásba
+      </button>
+    </div>
+  </div>
+
+  <!-- Stílus & Profil váltó modál -->
+  <div id="themeModal" class="modal-backdrop hidden">
+    <div class="modal-sheet">
+      <div class="row-between">
+        <h2>Stílus &amp; Profil</h2>
+        <button class="icon-btn" id="closeThemeModal" type="button" aria-label="Bezárás">✕</button>
+      </div>
+      <p class="muted small mt-1">Bármikor válthatsz a férfi és a női megjelenési módok között.</p>
+
+      <div class="theme-preview-grid mt-2" id="modalThemeChoices">
+        <button class="theme-card" type="button" data-theme-switch="male">
+          <span class="theme-swatch swatch-male"></span>
+          <div>
+            <strong>Barber &amp; Obsidian (Férfi)</strong>
+            <div class="small muted">Antracit + réz/bronz</div>
+          </div>
+        </button>
+        <button class="theme-card" type="button" data-theme-switch="female-light">
+          <span class="theme-swatch swatch-female-light"></span>
+          <div>
+            <strong>Luxury Editorial – Világos Selyem (Női)</strong>
+            <div class="small muted">Alabástrom + rózsaarany</div>
+          </div>
+        </button>
+        <button class="theme-card" type="button" data-theme-switch="female-dark">
+          <span class="theme-swatch swatch-female-dark"></span>
+          <div>
+            <strong>Luxury Editorial – Sötét Bársony (Női)</strong>
+            <div class="small muted">Szilva-burgundi + pezsgőarany</div>
+          </div>
+        </button>
+      </div>
+
+      <div class="stack-sm">
+        <button class="btn btn-secondary btn-block" id="modalPushBtn" type="button">
+          🔔 Push értesítések engedélyezése
+        </button>
+        <button class="btn btn-ghost btn-block" id="modalRefreshCalendarBtn" type="button">
+          🔄 Naptár frissítése most
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Firebase Compat SDKs (zero-build GitHub Pages kompatibilis) -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
+  <script src="./js/config.js"></script>
+  <script src="./js/firebase-service.js"></script>
+  <script src="./js/haircare-data.js"></script>
+  <script src="./js/guest.js"></script>
+</body>
+</html>

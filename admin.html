@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="hu" data-theme="male">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Atelier Szalon – Admin Vezérlő</title>
+  <meta name="theme-color" content="#0F1012" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Atelier Admin" />
+  <link rel="manifest" href="./admin-manifest.json" />
+  <link rel="icon" href="./icons/admin-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icons/admin-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <!-- Fejléc -->
+  <header class="app-header">
+    <div class="app-header-inner">
+      <div class="brand-wrap">
+        <span class="brand-title" id="adminSalonTitle">Atelier Admin</span>
+        <span class="brand-subtitle">Fodrász Vezérlőpult</span>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="adminSyncBtn" type="button" title="Google Naptár szinkronizálása">
+          <span>🔄</span>
+          <span>Szinkron</span>
+        </button>
+        <button class="icon-btn" id="adminLockBtn" type="button" title="Zárolás">🔒</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <div id="adminDemoBanner" class="top-banner demo-banner hidden">
+      <span><strong>Előnézeti mód:</strong> helyi próbaadatokkal működik a Firebase kulcsok beillesztéséig.</span>
+      <button class="btn btn-sm btn-ghost" id="closeAdminDemo" type="button">OK</button>
+    </div>
+
+    <div id="adminPushBanner" class="top-banner hidden">
+      <span>Kapcsold be az Admin push értesítéseket az SOS és késés jelzésekhez!</span>
+      <button class="btn btn-sm btn-primary" id="adminEnablePushBtn" type="button">Bekapcsolás</button>
+    </div>
+
+    <!-- ==================== 1. NAPTÁR & NAPI LISTA ==================== -->
+    <section id="admin-tab-calendar" class="tab-section active" aria-label="Naptár">
+      <div class="section-heading">
+        <h1>Naptár &amp; Napi lista</h1>
+        <p>Check-in adatok, inspirációs fotók és kézi extra emlékeztető küldése.</p>
+      </div>
+
+      <div class="chip-row" id="calFilterChips" style="margin-bottom:14px;">
+        <button class="chip selected" type="button" data-cal-filter="today">Mai nap</button>
+        <button class="chip" type="button" data-cal-filter="upcoming">Közelgő</button>
+        <button class="chip" type="button" data-cal-filter="all">Összes jövőbeli</button>
+      </div>
+
+      <div id="adminCalendarList"></div>
+    </section>
+
+    <!-- ==================== 2. VILLÁM & SOS ==================== -->
+    <section id="admin-tab-flashsos" class="tab-section" aria-label="Villám és SOS">
+      <div class="section-heading">
+        <h1>Villám &amp; SOS</h1>
+        <p>4x-es vészhelyzeti igények elbírálása és VIP villám-időpontok kiküldése.</p>
+      </div>
+
+      <!-- SOS Kérések -->
+      <div id="adminSosList"></div>
+
+      <!-- Új Villám-időpont kiküldése -->
+      <div class="card card-accent">
+        <div class="card-eyebrow">⚡ Új VIP Villám-időpont</div>
+        <h2 class="card-title">Felszabadult időpont kiküldése</h2>
+
+        <div class="form-group mt-2">
+          <label class="form-label" for="flashDateTimeInput">Időpont dátuma és órája</label>
+          <input class="input" type="datetime-local" id="flashDateTimeInput" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="flashDurationSelect">Elérhető időtartam (erre szűri a riasztást)</label>
+          <select class="select" id="flashDurationSelect">
+            <option value="30">30 perc (pl. gyors férfi vágás / szakáll)</option>
+            <option value="60" selected>60 perc (pl. férfi csomag / női vágás)</option>
+            <option value="90">90 perc (pl. festés + vágás)</option>
+            <option value="120">120+ perc (pl. melír / balayage)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="flashNoteInput">Rövid üzenet a vendégeknek (opcionális)</label>
+          <input class="input" type="text" id="flashNoteInput" placeholder="Pl. Ma délután váratlanul felszabadult egy 60 perces hely!" />
+        </div>
+
+        <button class="btn btn-primary btn-block" id="createFlashSlotBtn" type="button">
+          ⚡ Villám-időpont kiküldése a VIP vendégeknek
+        </button>
+      </div>
+
+      <!-- Aktív Villám-időpontok és jelentkezők -->
+      <div id="adminFlashSlotsList"></div>
+    </section>
+
+    <!-- ==================== 3. VENDÉGEK ==================== -->
+    <section id="admin-tab-guests" class="tab-section" aria-label="Vendégek">
+      <div class="section-heading">
+        <h1>Vendégek &amp; Párosítás</h1>
+        <p>Új regisztrálók összekötése a Google Naptár kulcsszóval, ciklusidők és időtartamok.</p>
+      </div>
+
+      <div id="adminPendingGuests"></div>
+      <div id="adminAllGuests"></div>
+    </section>
+
+    <!-- ==================== 4. ÁRLISTA & BEÁLLÍTÁSOK ==================== -->
+    <section id="admin-tab-settings" class="tab-section" aria-label="Árlista és beállítások">
+      <div class="section-heading">
+        <h1>Árlista &amp; Beállítások</h1>
+        <p>Aktuális/várható árak kezelése, PIN-kód és letölthető szalon QR-kódok.</p>
+      </div>
+
+      <!-- Árlista szerkesztő -->
+      <div class="card">
+        <div class="card-eyebrow">Árlista kezelés</div>
+        <h2 class="card-title">Aktuális és Várható árlista</h2>
+
+        <div class="segmented-control mt-2">
+          <button class="segmented-btn active" id="adminPriceTabCurrent" type="button">Aktuális</button>
+          <button class="segmented-btn" id="adminPriceTabUpcoming" type="button">Várható</button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="adminPriceEffectiveDate">Hatálybalépés dátuma</label>
+          <input class="input" type="text" id="adminPriceEffectiveDate" placeholder="Pl. 2027. 01. 01." />
+        </div>
+
+        <!-- Gyors átmásolás + Ft emelés -->
+        <div class="disclosure" id="copyRaiseDisclosure">
+          <button class="disclosure-trigger" type="button" data-disclosure="copyRaiseDisclosure">
+            <span>📈 Aktuális átmásolása a Várhatóba + emeléssel</span>
+            <span class="disclosure-chevron">▾</span>
+          </button>
+          <div class="disclosure-body">
+            <p class="small muted">Egy kattintással átmásolja a teljes Aktuális árlistát a Várhatóba, és minden tételhez hozzáadja a megadott Ft összeget.</p>
+            <div class="form-group mt-2">
+              <label class="form-label" for="raiseAmountInput">Emelés összege (Ft)</label>
+              <input class="input" type="number" id="raiseAmountInput" value="800" step="100" />
+            </div>
+            <button class="btn btn-primary btn-block" id="copyAndRaiseBtn" type="button">
+              Átmásolás + emelés alkalmazása
+            </button>
+          </div>
+        </div>
+
+        <div id="adminPricingEditor" class="mt-2"></div>
+
+        <div class="row-gap mt-2">
+          <button class="btn btn-secondary" id="addCategoryBtn" type="button">+ Új kategória</button>
+          <button class="btn btn-primary" id="savePricingBtn" type="button" style="flex:1;">💾 Árlista mentése</button>
+        </div>
+      </div>
+
+      <!-- Beépített QR-kód generátor -->
+      <div class="card card-accent">
+        <div class="card-eyebrow">Szalon QR-kód Generátor</div>
+        <h2 class="card-title">Vendég &amp; Admin QR-kódok</h2>
+        <p class="muted small mt-1">Az app automatikusan felismeri az aktuális webcímedet, de itt bármikor módosíthatod is (pl. a kész GitHub Pages URL-re).</p>
+
+        <div class="form-group mt-2">
+          <label class="form-label" for="qrBaseUrlInput">Alkalmazás alap URL (pl. https://nev.github.io/szalon/)</label>
+          <input class="input" type="url" id="qrBaseUrlInput" />
+        </div>
+        <button class="btn btn-secondary btn-block" id="regenerateQrBtn" type="button">QR-kódok frissítése</button>
+
+        <div class="qr-card mt-2">
+          <strong>1. Vendég Alkalmazás QR-kód (Szalonba kihelyezhető)</strong>
+          <div class="small muted" id="qrGuestUrlText"></div>
+          <div class="qr-canvas-frame">
+            <canvas id="qrGuestCanvas"></canvas>
+          </div>
+          <div class="row-gap" style="width:100%;">
+            <button class="btn btn-primary btn-sm" id="downloadGuestQrBtn" type="button" style="flex:1;">⬇ Letöltés (PNG)</button>
+            <button class="btn btn-secondary btn-sm" id="printGuestQrBtn" type="button" style="flex:1;">🖨 Nyomtatás</button>
+          </div>
+        </div>
+
+        <div class="qr-card">
+          <strong>2. Saját Admin Alkalmazás QR-kód (Saját telefonra)</strong>
+          <div class="small muted" id="qrAdminUrlText"></div>
+          <div class="qr-canvas-frame">
+            <canvas id="qrAdminCanvas"></canvas>
+          </div>
+          <div class="row-gap" style="width:100%;">
+            <button class="btn btn-primary btn-sm" id="downloadAdminQrBtn" type="button" style="flex:1;">⬇ Letöltés (PNG)</button>
+            <button class="btn btn-secondary btn-sm" id="printAdminQrBtn" type="button" style="flex:1;">🖨 Nyomtatás</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin PIN módosítás & Push -->
+      <div class="card">
+        <div class="card-eyebrow">Biztonság &amp; Értesítések</div>
+        <h2 class="card-title">Admin PIN-kód módosítása</h2>
+        <div class="form-group mt-2">
+          <label class="form-label" for="newPinInput">Új PIN-kód (4–6 számjegy)</label>
+          <input class="input" type="password" inputmode="numeric" maxlength="6" id="newPinInput" placeholder="Pl. 2580" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="confirmNewPinInput">Új PIN-kód megerősítése</label>
+          <input class="input" type="password" inputmode="numeric" maxlength="6" id="confirmNewPinInput" placeholder="Írd be újra" />
+        </div>
+        <button class="btn btn-primary btn-block" id="changePinBtn" type="button">PIN-kód frissítése</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Fix 4 füles alsó navigációs sáv (Admin) -->
+  <nav class="bottom-nav" aria-label="Admin navigáció">
+    <div class="bottom-nav-inner">
+      <button class="nav-item active" type="button" data-admin-tab="calendar">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+        <span>Naptár</span>
+      </button>
+      <button class="nav-item" type="button" data-admin-tab="flashsos">
+        <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+        <span>Villám &amp; SOS</span>
+        <span class="nav-dot hidden" id="adminSosNavDot"></span>
+      </button>
+      <button class="nav-item" type="button" data-admin-tab="guests">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><path d="M17 11a3 3 0 1 0 0-6M22 20c0-2.5-1.8-4.5-4.2-5.2"/></svg>
+        <span>Vendégek</span>
+        <span class="nav-dot hidden" id="adminGuestNavDot"></span>
+      </button>
+      <button class="nav-item" type="button" data-admin-tab="settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+        <span>Beállítások</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Admin PIN beállítás / belépés képernyő -->
+  <div id="pinOverlay" class="fullscreen-overlay">
+    <div class="overlay-card" style="text-align:center;">
+      <div class="card-eyebrow">Admin Hozzáférés</div>
+      <h1 id="pinTitle" style="font-size:1.5rem;">Admin PIN-kód</h1>
+      <p class="muted small mt-1" id="pinSubtitle">Betöltés...</p>
+
+      <div class="pin-dots" id="pinDots"></div>
+      <div class="pin-pad" id="pinPad">
+        <button class="pin-key" type="button" data-key="1">1</button>
+        <button class="pin-key" type="button" data-key="2">2</button>
+        <button class="pin-key" type="button" data-key="3">3</button>
+        <button class="pin-key" type="button" data-key="4">4</button>
+        <button class="pin-key" type="button" data-key="5">5</button>
+        <button class="pin-key" type="button" data-key="6">6</button>
+        <button class="pin-key" type="button" data-key="7">7</button>
+        <button class="pin-key" type="button" data-key="8">8</button>
+        <button class="pin-key" type="button" data-key="9">9</button>
+        <button class="pin-key" type="button" data-key="clear">⌫</button>
+        <button class="pin-key" type="button" data-key="0">0</button>
+        <button class="pin-key" type="button" data-key="ok" style="background:var(--accent);color:var(--accent-text);">OK</button>
+      </div>
+      <p class="small mt-2" id="pinError" style="color:#EF4444;min-height:1.2em;"></p>
+    </div>
+  </div>
+
+  <!-- Kézi extra emlékeztető modál -->
+  <div id="reminderModal" class="modal-backdrop hidden">
+    <div class="modal-sheet">
+      <div class="row-between">
+        <h2>Extra emlékeztető küldése</h2>
+        <button class="icon-btn" id="closeReminderModal" type="button">✕</button>
+      </div>
+      <p class="muted small mt-1" id="reminderTargetInfo"></p>
+      <div class="form-group mt-2">
+        <label class="form-label" for="reminderCustomMsg">Opcionális egyedi üzenet</label>
+        <textarea class="textarea" id="reminderCustomMsg" placeholder="Ha üresen hagyod, az alapértelmezett kedves emlékeztető megy ki..."></textarea>
+      </div>
+      <button class="btn btn-primary btn-block" id="sendReminderConfirmBtn" type="button">
+        🔔 Push emlékeztető küldése most
+      </button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
+  <script src="./js/config.js"></script>
+  <script src="./js/firebase-service.js"></script>
+  <script src="./js/qrcode-gen.js"></script>
+  <script src="./js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+/* ==========================================================================
+   Firebase Cloud Messaging Háttér Service Worker (firebase-messaging-sw.js)
+   FONTOS: A telepítéskor illeszd be ugyanazokat a Firebase adatokat ide is,
+   amiket a js/config.js fájlba beírtál!
+   ========================================================================== */
+
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
+
+const FIREBASE_SW_CONFIG = {
+  apiKey: 'IDE_ILLESZD_A_FIREBASE_API_KEYT',
+  authDomain: 'IDE_ILLESZD_AZ_AUTH_DOMAINT',
+  projectId: 'IDE_ILLESZD_A_PROJECT_ID_T',
+  storageBucket: 'IDE_ILLESZD_A_STORAGE_BUCKETET',
+  messagingSenderId: 'IDE_ILLESZD_A_MESSAGING_SENDER_ID_T',
+  appId: 'IDE_ILLESZD_AZ_APP_ID_T'
+};
+
+const isConfigured =
+  FIREBASE_SW_CONFIG.apiKey &&
+  !FIREBASE_SW_CONFIG.apiKey.startsWith('IDE_ILLESZD');
+
+if (isConfigured) {
+  firebase.initializeApp(FIREBASE_SW_CONFIG);
+  const messaging = firebase.messaging();
+
+  messaging.onBackgroundMessage((payload) => {
+    const title =
+      (payload.notification && payload.notification.title) ||
+      (payload.data && payload.data.title) ||
+      'Atelier Szalon';
+    const body =
+      (payload.notification && payload.notification.body) ||
+      (payload.data && payload.data.body) ||
+      'Új értesítésed érkezett a szalontól.';
+    const targetUrl = (payload.data && payload.data.url) || './index.html';
+    const icon =
+      targetUrl.includes('admin')
+        ? './icons/admin-192.png'
+        : './icons/guest-192.png';
+
+    self.registration.showNotification(title, {
+      body,
+      icon,
+      badge: icon,
+      vibrate: [180, 80, 180],
+      data: { url: targetUrl }
+    });
+  });
+}
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || './index.html';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.navigate(targetUrl).catch(() => {});
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
