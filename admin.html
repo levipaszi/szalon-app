@@ -125,6 +125,12 @@
         <p>Beérkező üzenetek, új beszélgetés indítása és vendégek párosítása.</p>
       </div>
 
+      <!-- Élő vendég- és üzenetkereső -->
+      <div class="row-gap" style="margin-bottom:14px;">
+        <input class="input" type="search" id="adminGuestSearchInput" style="flex:1;" placeholder="🔍 Vendég neve vagy üzenet keresése..." autocomplete="off" />
+        <button class="icon-btn hidden" id="adminGuestSearchClear" type="button" aria-label="Keresés törlése">✕</button>
+      </div>
+
       <div id="adminMessagesInbox"></div>
       <div id="adminPendingGuests"></div>
       <div id="adminAllGuests"></div>

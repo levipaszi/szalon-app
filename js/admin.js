@@ -22,6 +22,7 @@
     pricingEditTab: 'current',
     reminderTarget: null,
     activeChatGuestId: null,
+    guestSearchQuery: '',
     contact: {
       phoneRaw: window.APP_CONFIG.SOS_PHONE_RAW,
       phoneDisplay: window.APP_CONFIG.SOS_PHONE_DISPLAY,
@@ -580,13 +581,38 @@
   }
 
   // ---------------- 3. ÜZENETEK (INBOX) & VENDÉGEK ----------------
+  function normSearch(str) {
+    return String(str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  }
+
+  function guestMatchesSearch(g, qNorm) {
+    if (!qNorm) return true;
+    if (normSearch(g.name).includes(qNorm)) return true;
+    if (normSearch(g.calendarKeyword).includes(qNorm)) return true;
+    if (normSearch(g.lastMessagePreview).includes(qNorm)) return true;
+    if (Array.isArray(g.chatMessages)) {
+      return g.chatMessages.some((m) => normSearch(m.text).includes(qNorm));
+    }
+    return false;
+  }
+
   function renderMessagesInbox() {
     const inboxEl = $('#adminMessagesInbox');
     if (!inboxEl) return;
 
-    const sortedAll = state.guests.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hu'));
-    const withChats = state.guests
-      .filter((g) => (Array.isArray(g.chatMessages) && g.chatMessages.length > 0) || Number(g.unreadForAdmin) > 0)
+    const qNorm = normSearch(state.guestSearchQuery);
+    const matchingGuests = state.guests.filter((g) => guestMatchesSearch(g, qNorm));
+
+    const sortedAll = matchingGuests.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hu'));
+    const allWithChats = state.guests.filter(
+      (g) => (Array.isArray(g.chatMessages) && g.chatMessages.length > 0) || Number(g.unreadForAdmin) > 0
+    );
+    const withChats = allWithChats
+      .filter((g) => guestMatchesSearch(g, qNorm))
       .sort((a, b) => {
         const ua = Number(a.unreadForAdmin) || 0;
         const ub = Number(b.unreadForAdmin) || 0;
@@ -594,7 +620,7 @@
         return new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0);
       });
 
-    const totalUnread = withChats.reduce((sum, g) => sum + (Number(g.unreadForAdmin) || 0), 0);
+    const totalUnread = allWithChats.reduce((sum, g) => sum + (Number(g.unreadForAdmin) || 0), 0);
     const hdrCount = $('#adminHeaderChatCount');
     const hdrBtn = $('#adminHeaderChatBtn');
     if (hdrCount) hdrCount.textContent = String(totalUnread);
@@ -607,15 +633,15 @@
       ? `
         <div class="row-gap mt-2">
           <select class="select" id="newChatGuestSelect" style="flex:1;">
-            <option value="">Válassz vendéget új beszélgetéshez...</option>
+            <option value="">Válassz vendéget új beszélgetéshez (${sortedAll.length})...</option>
             ${sortedAll.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}
           </select>
           <button class="btn btn-primary btn-sm" id="startNewChatBtn" type="button">💬 Írás</button>
         </div>`
-      : '<p class="small muted mt-1">Még nincs regisztrált vendég.</p>';
+      : `<p class="small muted mt-1">${qNorm ? 'Nincs a keresésnek megfelelő vendég.' : 'Még nincs regisztrált vendég.'}</p>`;
 
     const listBlock = !withChats.length
-      ? '<p class="small muted mt-2">Még nincs beérkező üzenet. A fenti listából bármelyik vendéggel kezdeményezhetsz beszélgetést!</p>'
+      ? `<p class="small muted mt-2">${qNorm ? 'Nincs a keresésnek megfelelő beszélgetés.' : 'Még nincs beérkező üzenet. A fenti listából bármelyik vendéggel kezdeményezhetsz beszélgetést!'}</p>`
       : withChats
           .map((g) => {
             const unread = Number(g.unreadForAdmin) || 0;
@@ -672,8 +698,11 @@
 
   function renderGuests() {
     renderMessagesInbox();
-    const pending = state.guests.filter((g) => !g.paired);
-    const paired = state.guests.filter((g) => g.paired).sort((a, b) => a.name.localeCompare(b.name, 'hu'));
+    const qNorm = normSearch(state.guestSearchQuery);
+    const pending = state.guests.filter((g) => !g.paired && guestMatchesSearch(g, qNorm));
+    const paired = state.guests
+      .filter((g) => g.paired && guestMatchesSearch(g, qNorm))
+      .sort((a, b) => a.name.localeCompare(b.name, 'hu'));
     renderAdminUrgentAlerts();
 
     const pendingEl = $('#adminPendingGuests');
@@ -1022,10 +1051,28 @@
       });
     });
 
-    // Fejléc Üzenetek gomb
+    // Fejléc Üzenetek gomb + Vendég keresősáv
     $('#adminHeaderChatBtn').addEventListener('click', () => {
       switchAdminTab('guests');
     });
+
+    const searchInp = $('#adminGuestSearchInput');
+    const searchClr = $('#adminGuestSearchClear');
+    if (searchInp) {
+      searchInp.addEventListener('input', () => {
+        state.guestSearchQuery = searchInp.value || '';
+        if (searchClr) searchClr.classList.toggle('hidden', !state.guestSearchQuery.trim());
+        renderGuests();
+      });
+    }
+    if (searchClr) {
+      searchClr.addEventListener('click', () => {
+        state.guestSearchQuery = '';
+        if (searchInp) searchInp.value = '';
+        searchClr.classList.add('hidden');
+        renderGuests();
+      });
+    }
 
     // Szinkron & Zárolás
     $('#adminSyncBtn').addEventListener('click', async () => {
