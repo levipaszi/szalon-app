@@ -543,24 +543,146 @@
     });
   }
 
-  // ---------------- IDŐPONTOK ----------------
-  function subscribeGuestAppointments(guestId, cb) {
+  // ---------------- IDŐPONTOK (SAJÁT + ADMIN ÁLTAL ÖSSZEVONT CSALÁDI CSOPORT) ----------------
+  function subscribeGuestAppointments(guestId, cb, familyMemberIds) {
+    const ids = Array.from(
+      new Set([guestId].concat(Array.isArray(familyMemberIds) ? familyMemberIds : []).filter(Boolean))
+    ).slice(0, 10);
+
     if (demoMode) {
       return subscribeDemo((state) => {
         const list = Object.values(state.appointments)
-          .filter((a) => a.guestId === guestId)
+          .filter((a) => ids.includes(a.guestId))
           .sort((a, b) => new Date(a.startIso) - new Date(b.startIso));
         cb(list);
       });
     }
-    return db.collection('appointments')
-      .where('guestId', '==', guestId)
-      .onSnapshot((qs) => {
-        const list = qs.docs
-          .map((d) => Object.assign({ id: d.id }, d.data()))
-          .sort((a, b) => new Date(a.startIso) - new Date(b.startIso));
-        cb(list);
+
+    const query = ids.length > 1
+      ? db.collection('appointments').where('guestId', 'in', ids)
+      : db.collection('appointments').where('guestId', '==', guestId);
+
+    return query.onSnapshot((qs) => {
+      const list = qs.docs
+        .map((d) => Object.assign({ id: d.id }, d.data()))
+        .sort((a, b) => new Date(a.startIso) - new Date(b.startIso));
+      cb(list);
+    });
+  }
+
+  async function saveFamilyGroup(memberGuests, groupName) {
+    if (!Array.isArray(memberGuests) || memberGuests.length < 2) return;
+    const groupId = genId('fam');
+    const cleanName = String(groupName || '').trim() || 'Családi csoport';
+    const memberIds = memberGuests.map((g) => g.id);
+    const memberNames = {};
+    memberGuests.forEach((g) => { memberNames[g.id] = g.name; });
+
+    const patch = {
+      familyGroupId: groupId,
+      familyGroupName: cleanName,
+      familyMemberIds: memberIds,
+      familyMemberNames: memberNames
+    };
+
+    if (demoMode) {
+      const state = loadDemoDB();
+      memberIds.forEach((gid) => {
+        if (state.guests[gid]) {
+          state.guests[gid] = Object.assign({}, state.guests[gid], patch);
+        }
       });
+      saveDemoDB(state);
+      return;
+    }
+
+    const batch = db.batch();
+    memberIds.forEach((gid) => {
+      batch.set(db.collection('guests').doc(gid), patch, { merge: true });
+    });
+    await batch.commit();
+  }
+
+  async function removeFromFamilyGroup(targetGuestId, allGuests) {
+    const target = (allGuests || []).find((g) => g.id === targetGuestId);
+    if (!target || !target.familyGroupId) return;
+    const gid = target.familyGroupId;
+    const remaining = (allGuests || []).filter((g) => g.familyGroupId === gid && g.id !== targetGuestId);
+    const emptyPatch = {
+      familyGroupId: '',
+      familyGroupName: '',
+      familyMemberIds: [],
+      familyMemberNames: {}
+    };
+
+    if (demoMode) {
+      const state = loadDemoDB();
+      if (state.guests[targetGuestId]) {
+        state.guests[targetGuestId] = Object.assign({}, state.guests[targetGuestId], emptyPatch);
+      }
+      if (remaining.length < 2) {
+        remaining.forEach((g) => {
+          if (state.guests[g.id]) state.guests[g.id] = Object.assign({}, state.guests[g.id], emptyPatch);
+        });
+      } else {
+        const remIds = remaining.map((g) => g.id);
+        const remNames = {};
+        remaining.forEach((g) => { remNames[g.id] = g.name; });
+        remaining.forEach((g) => {
+          if (state.guests[g.id]) {
+            state.guests[g.id] = Object.assign({}, state.guests[g.id], {
+              familyMemberIds: remIds,
+              familyMemberNames: remNames
+            });
+          }
+        });
+      }
+      saveDemoDB(state);
+      return;
+    }
+
+    const batch = db.batch();
+    batch.set(db.collection('guests').doc(targetGuestId), emptyPatch, { merge: true });
+    if (remaining.length < 2) {
+      remaining.forEach((g) => {
+        batch.set(db.collection('guests').doc(g.id), emptyPatch, { merge: true });
+      });
+    } else {
+      const remIds = remaining.map((g) => g.id);
+      const remNames = {};
+      remaining.forEach((g) => { remNames[g.id] = g.name; });
+      remaining.forEach((g) => {
+        batch.set(db.collection('guests').doc(g.id), {
+          familyMemberIds: remIds,
+          familyMemberNames: remNames
+        }, { merge: true });
+      });
+    }
+    await batch.commit();
+  }
+
+  async function dissolveFamilyGroup(groupId, allGuests) {
+    const members = (allGuests || []).filter((g) => g.familyGroupId === groupId);
+    if (!members.length) return;
+    const emptyPatch = {
+      familyGroupId: '',
+      familyGroupName: '',
+      familyMemberIds: [],
+      familyMemberNames: {}
+    };
+    if (demoMode) {
+      const state = loadDemoDB();
+      members.forEach((g) => {
+        if (state.guests[g.id]) state.guests[g.id] = Object.assign({}, state.guests[g.id], emptyPatch);
+      });
+      saveDemoDB(state);
+      return;
+    }
+    const batch = db.batch();
+    members.forEach((g) => {
+      batch.set(db.collection('guests').doc(g.id), emptyPatch, { merge: true });
+    });
+    await batch.commit();
   }
 
   function subscribeAllAppointments(cb) {
@@ -1022,6 +1144,9 @@
     subscribeGuestAppointments,
     subscribeAllAppointments,
     updateAppointmentMeta,
+    saveFamilyGroup,
+    removeFromFamilyGroup,
+    dissolveFamilyGroup,
     subscribePricing,
     savePricing,
     subscribeContactSettings,

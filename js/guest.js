@@ -136,13 +136,38 @@
     const sorted = state.appointments
       .slice()
       .sort((a, b) => new Date(a.startIso) - new Date(b.startIso));
-    const past = sorted.filter((a) => new Date(a.endIso || a.startIso) < now);
-    const future = sorted.filter((a) => new Date(a.endIso || a.startIso) >= now);
+
+    // A Frizura-állapot % szigorúan a vendég SAJÁT utolsó látogatásából számol!
+    const ownPast = sorted.filter(
+      (a) => a.guestId === state.guestId && new Date(a.endIso || a.startIso) < now
+    );
+
+    // Jövőbeli időpontok (saját + összevont családi tagok), duplikált naptárbejegyzés kiszűrésével
+    const rawFuture = sorted.filter((a) => new Date(a.endIso || a.startIso) >= now);
+    const seenKeys = new Set();
+    const allFuture = [];
+    rawFuture.forEach((a) => {
+      const dedupKey = `${a.eventId || ''}|${a.startIso}|${(a.title || '').trim()}`;
+      if (seenKeys.has(dedupKey)) return;
+      seenKeys.add(dedupKey);
+      allFuture.push(a);
+    });
+
+    const ownFuture = allFuture.filter((a) => a.guestId === state.guestId);
     return {
-      lastPast: past.length ? past[past.length - 1] : null,
-      nextAppt: future.length ? future[0] : null,
-      allFuture: future
+      lastPast: ownPast.length ? ownPast[ownPast.length - 1] : null,
+      nextAppt: ownFuture.length ? ownFuture[0] : (allFuture.length ? allFuture[0] : null),
+      allFuture
     };
+  }
+
+  function getApptOwnerLabel(appt) {
+    if (!state.guest) return '';
+    const hasFamily = Array.isArray(state.guest.familyMemberIds) && state.guest.familyMemberIds.length > 1;
+    if (!hasFamily) return '';
+    if (appt.guestId === state.guestId) return '👤 Saját';
+    const names = state.guest.familyMemberNames || {};
+    return `👨‍👩‍👧 ${names[appt.guestId] || 'Családtag'}`;
   }
 
   function renderHairHealth(lastPast) {
@@ -224,14 +249,16 @@
     } else {
       const d = new Date(nextAppt.startIso);
       const isToday = isSameCalendarDay(d, new Date());
+      const ownerLabel = getApptOwnerLabel(nextAppt);
       nextContent.innerHTML = `
         <div class="next-appt-date">${esc(formatHuDateFull(nextAppt.startIso))}</div>
         <div class="row-gap">
           <span class="next-appt-time">🕒 ${esc(formatHuTimeRange(nextAppt.startIso, nextAppt.endIso))}</span>
           <span class="badge">${nextAppt.durationMin || 60} perc</span>
+          ${ownerLabel ? `<span class="badge badge-accent">${esc(ownerLabel)}</span>` : ''}
           ${isToday ? '<span class="badge badge-success">Ma!</span>' : ''}
         </div>
-        ${nextAppt.title ? `<p class="muted small mt-1">${esc(nextAppt.title)}</p>` : ''}
+        ${nextAppt.title ? `<p class="small mt-1" style="font-weight:600;color:var(--text);">📝 ${esc(nextAppt.title)}</p>` : ''}
       `;
 
       // Időpont napján aktív 10 perc késés gomb (más napokon inaktív tájékoztatóként látható, hogy a vendég mindig tudja, hol találja)
@@ -281,8 +308,12 @@
       }
     }
 
-    // Összes lefoglalt időpont dinamikus évszámok szerinti csoportosítása
-    $('#allApptsTitle').textContent = `Összes lefoglalt időpontom (${allFuture.length})`;
+    // Összes lefoglalt időpont dinamikus évszámok szerinti csoportosítása (naptárbejegyzés szövegével + családi névvel!)
+    const hasFamily = Array.isArray(state.guest.familyMemberIds) && state.guest.familyMemberIds.length > 1;
+    const famLabel = state.guest.familyGroupName ? ` (${state.guest.familyGroupName})` : '';
+    $('#allApptsTitle').textContent = hasFamily
+      ? `Közös családi időpontok${famLabel} (${allFuture.length})`
+      : `Összes lefoglalt időpontom (${allFuture.length})`;
     const body = $('#allApptsBody');
     if (!allFuture.length) {
       body.innerHTML = '<p class="muted small">Még nincs rögzített jövőbeli időpontod.</p>';
@@ -300,16 +331,19 @@
           <div class="year-group">
             <div class="year-heading">${year}</div>
             ${grouped[year]
-              .map(
-                (a) => `
+              .map((a) => {
+                const ownerBadge = getApptOwnerLabel(a);
+                return `
                 <div class="appt-list-item">
-                  <div>
+                  <div style="min-width:0;flex:1;">
                     <div style="font-weight:600;font-size:0.93rem;">${esc(formatHuDateFull(a.startIso))}</div>
                     <div class="small muted">${esc(formatHuTimeRange(a.startIso, a.endIso))} · ${a.durationMin || 60} perc</div>
+                    ${a.title ? `<div class="small" style="margin-top:3px;font-weight:500;color:var(--text);">📝 ${esc(a.title)}</div>` : ''}
+                    ${ownerBadge ? `<div style="margin-top:4px;"><span class="badge">${esc(ownerBadge)}</span></div>` : ''}
                   </div>
                   <span class="badge badge-accent">${new Date(a.startIso).toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>`
-              )
+                </div>`;
+              })
               .join('')}
           </div>`
         )
@@ -1332,7 +1366,33 @@
     });
   }
 
+  let unsubAppts = null;
+  let subscribedFamilyKey = '';
+
+  function ensureAppointmentsSubscription(familyMemberIds) {
+    const ids = Array.from(
+      new Set([state.guestId].concat(Array.isArray(familyMemberIds) ? familyMemberIds : []).filter(Boolean))
+    ).sort();
+    const key = ids.join('|');
+    if (key === subscribedFamilyKey && unsubAppts) return;
+    subscribedFamilyKey = key;
+    if (typeof unsubAppts === 'function') {
+      try { unsubAppts(); } catch (_) {}
+    }
+    unsubAppts = window.SalonService.subscribeGuestAppointments(
+      state.guestId,
+      (appts) => {
+        state.appointments = appts;
+        renderHome();
+        renderGuestUrgentAlerts();
+      },
+      ids
+    );
+  }
+
   function startSubscriptions() {
+    ensureAppointmentsSubscription([state.guestId]);
+
     let guestLoaded = false;
     let prevUnreadForGuest = 0;
     window.SalonService.subscribeGuest(state.guestId, (guest) => {
@@ -1341,6 +1401,7 @@
         setupOnboarding();
         return;
       }
+      ensureAppointmentsSubscription(guest.familyMemberIds);
       const newUnread = Number(guest.unreadForGuest) || 0;
       if (guestLoaded && newUnread > prevUnreadForGuest && window.PwaUX) {
         if (!state.chatOpen) {
@@ -1377,12 +1438,6 @@
       state.contact = contact;
       renderGuestContactAndChat();
       renderHome();
-    });
-
-    window.SalonService.subscribeGuestAppointments(state.guestId, (appts) => {
-      state.appointments = appts;
-      renderHome();
-      renderGuestUrgentAlerts();
     });
 
     window.SalonService.subscribePricing((pricing) => {

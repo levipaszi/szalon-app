@@ -24,6 +24,7 @@
     reminderTarget: null,
     activeChatGuestId: null,
     guestSearchQuery: '',
+    selectedFamilyIds: new Set(),
     contact: {
       phoneRaw: window.APP_CONFIG.SOS_PHONE_RAW,
       phoneDisplay: window.APP_CONFIG.SOS_PHONE_DISPLAY,
@@ -820,9 +821,135 @@
     });
   }
 
+  function renderFamilyGroups() {
+    const el = $('#adminFamilyGroups');
+    if (!el) return;
+
+    // Meglévő családi csoportok kigyűjtése
+    const groupsMap = {};
+    state.guests.forEach((g) => {
+      if (g.familyGroupId) {
+        if (!groupsMap[g.familyGroupId]) {
+          groupsMap[g.familyGroupId] = {
+            id: g.familyGroupId,
+            name: g.familyGroupName || 'Családi csoport',
+            members: []
+          };
+        }
+        groupsMap[g.familyGroupId].members.push(g);
+      }
+    });
+    const groups = Object.values(groupsMap);
+    const allSorted = state.guests.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hu'));
+    const wasOpen = el.querySelector('#familyGroupDisc') && el.querySelector('#familyGroupDisc').classList.contains('open');
+
+    const groupsHtml = !groups.length
+      ? '<p class="small muted">Még nincs összevont családi csoport. Alább bármely 2 vagy több vendéget össze tudsz kapcsolni.</p>'
+      : groups
+          .map(
+            (grp) => `
+            <div class="protocol-step">
+              <div class="row-between">
+                <strong>👨‍👩‍👧 ${esc(grp.name)} (${grp.members.length} fő)</strong>
+                <button class="btn btn-sm btn-ghost" type="button" data-dissolve-family="${grp.id}">Szétválasztás</button>
+              </div>
+              <div class="chip-row mt-1">
+                ${grp.members
+                  .map(
+                    (m) => `
+                    <span class="badge badge-accent">
+                      ${esc(m.name)}
+                      <button type="button" data-remove-family-member="${m.id}" style="background:none;border:none;color:inherit;cursor:pointer;padding:0 2px;font-weight:700;" title="Eltávolítás a csoportból">✕</button>
+                    </span>`
+                  )
+                  .join('')}
+              </div>
+            </div>`
+          )
+          .join('');
+
+    const pickerChips = allSorted
+      .map((g) => {
+        const sel = state.selectedFamilyIds.has(g.id);
+        return `<button class="chip ${sel ? 'selected' : ''}" type="button" data-fam-pick="${g.id}">${esc(g.name)}${g.familyGroupId ? ' (csoportban)' : ''}</button>`;
+      })
+      .join('');
+
+    el.innerHTML = `
+      <div class="card">
+        <div class="disclosure ${wasOpen ? 'open' : ''}" id="familyGroupDisc" style="margin-top:0;border:none;background:transparent;">
+          <button class="disclosure-trigger" style="padding:0;min-height:38px;" type="button" data-disclosure="familyGroupDisc">
+            <div>
+              <div class="card-eyebrow">Családi / Közös nézet (${groups.length} csoport)</div>
+              <div class="card-title">👨‍👩‍👧 Időpontok összevonása (Férj / Feleség / Gyerek)</div>
+            </div>
+            <span class="disclosure-chevron">▾</span>
+          </button>
+          <div class="disclosure-body" style="padding:14px 0 0;">
+            <p class="small muted">Csak azok a vendégek látják egymás időpontjait, akiket itt összevonsz. Mindenki más kizárólag a sajátját látja.</p>
+            <div class="mt-2">${groupsHtml}</div>
+
+            <div class="protocol-step mt-2">
+              <div class="protocol-step-title">➕ Új csoport összevonása</div>
+              <div class="form-group mt-1">
+                <label class="form-label" for="familyGroupNameInput">Csoport neve (opcionális)</label>
+                <input class="input" id="familyGroupNameInput" type="text" placeholder="Pl. Kovács család" />
+              </div>
+              <span class="form-label">Jelölj ki legalább 2 vendéget (${state.selectedFamilyIds.size} kijelölve):</span>
+              <div class="chip-row mt-1">${pickerChips || '<span class="small muted">Még nincs vendég.</span>'}</div>
+              <button class="btn btn-primary btn-block mt-2" id="saveFamilyGroupBtn" type="button">
+                🔗 Kijelöltek összevonása (${state.selectedFamilyIds.size} fő)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    $$('[data-fam-pick]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const gid = btn.dataset.famPick;
+        if (state.selectedFamilyIds.has(gid)) state.selectedFamilyIds.delete(gid);
+        else state.selectedFamilyIds.add(gid);
+        renderFamilyGroups();
+      });
+    });
+
+    const saveBtn = $('#saveFamilyGroupBtn');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        if (state.selectedFamilyIds.size < 2) {
+          showToast('Jelölj ki legalább 2 vendéget az összevonáshoz!');
+          return;
+        }
+        const members = state.guests.filter((g) => state.selectedFamilyIds.has(g.id));
+        const gName = ($('#familyGroupNameInput').value || '').trim() || 'Családi csoport';
+        await window.SalonService.saveFamilyGroup(members, gName);
+        state.selectedFamilyIds.clear();
+        showToast(`Összevonva (${members.length} fő): ${gName}! Mostantól látják egymás időpontjait.`);
+      });
+    }
+
+    $$('[data-remove-family-member]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await window.SalonService.removeFromFamilyGroup(btn.dataset.removeFamilyMember, state.guests);
+        showToast('Vendég eltávolítva a közös csoportból.');
+      });
+    });
+
+    $$('[data-dissolve-family]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!window.confirm('Biztosan szétválasztod ezt a csoportot? Ezután újra csak a saját időpontjaikat látják.')) return;
+        await window.SalonService.dissolveFamilyGroup(btn.dataset.dissolveFamily, state.guests);
+        showToast('Csoport szétválasztva.');
+      });
+    });
+  }
+
   function renderGuests() {
     renderSearchQuickResults();
     renderMessagesInbox();
+    renderFamilyGroups();
     const qNorm = normSearch(state.guestSearchQuery);
     const pending = state.guests.filter((g) => !g.paired && guestMatchesSearch(g, qNorm));
     const paired = state.guests
@@ -875,6 +1002,7 @@
                       <span class="row-gap">
                         <span class="badge ${g.gender === 'male' ? 'badge-male' : 'badge-female'}">${g.gender === 'male' ? 'Férfi' : 'Női'}</span>
                         <span>${esc(g.name)}</span>
+                        ${g.familyGroupId ? `<span class="badge badge-accent">👨‍👩‍👧 ${esc(g.familyGroupName || 'Család')}</span>` : ''}
                         ${Number(g.unreadForAdmin) > 0 ? `<span class="badge badge-danger">💬 ${g.unreadForAdmin} új</span>` : ''}
                       </span>
                       <span class="disclosure-chevron">▾</span>
