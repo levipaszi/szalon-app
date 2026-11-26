@@ -159,13 +159,20 @@
               ${a.subtitle ? `<div class="urgent-banner-sub">${escapeHtml(a.subtitle)}</div>` : ''}
             </div>
           </div>
-          ${
-            a.href
-              ? `<a class="btn btn-sm ${a.type === 'success' ? 'btn-success' : a.type === 'danger' ? 'btn-danger' : 'btn-primary'}" href="${a.href}">${escapeHtml(a.cta || 'Megnyitás')}</a>`
-              : a.cta
-                ? `<button class="btn btn-sm ${a.type === 'success' ? 'btn-success' : a.type === 'danger' ? 'btn-danger' : 'btn-primary'}" type="button" data-urgent-idx="${idx}">${escapeHtml(a.cta)}</button>`
+          <div class="row-gap" style="flex-shrink:0;">
+            ${
+              a.href
+                ? `<a class="btn btn-sm ${a.type === 'success' ? 'btn-success' : a.type === 'danger' ? 'btn-danger' : 'btn-primary'}" href="${a.href}">${escapeHtml(a.cta || 'Megnyitás')}</a>`
+                : a.cta
+                  ? `<button class="btn btn-sm ${a.type === 'success' ? 'btn-success' : a.type === 'danger' ? 'btn-danger' : 'btn-primary'}" type="button" data-urgent-idx="${idx}">${escapeHtml(a.cta)}</button>`
+                  : ''
+            }
+            ${
+              a.secondaryCta
+                ? `<button class="btn btn-sm btn-secondary" type="button" data-urgent-sec-idx="${idx}">${escapeHtml(a.secondaryCta)}</button>`
                 : ''
-          }
+            }
+          </div>
         </div>`
       )
       .join('');
@@ -174,6 +181,13 @@
       btn.addEventListener('click', () => {
         const item = alerts[Number(btn.dataset.urgentIdx)];
         if (item && typeof item.onClick === 'function') item.onClick();
+      });
+    });
+
+    el.querySelectorAll('[data-urgent-sec-idx]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const item = alerts[Number(btn.dataset.urgentSecIdx)];
+        if (item && typeof item.onSecondaryClick === 'function') item.onSecondaryClick();
       });
     });
   }

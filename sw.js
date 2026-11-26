@@ -7,7 +7,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'forfex-vip-v1.8.0';
+const CACHE_NAME = 'forfex-vip-v1.9.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -115,16 +115,41 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const isHtml =
+    event.request.mode === 'navigate' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname.endsWith('/');
+
+  // HTML -> Network-First (mindig a legfrissebb ?v=XX verziót kapja!)
+  // CSS/JS/Ikonok -> Stale-While-Revalidate (2ms-os azonnali betöltés mobilon!)
+  if (isHtml) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          if (res && res.status === 200 && url.origin === self.location.origin) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request)
-      .then((res) => {
-        if (res && res.status === 200 && url.origin === self.location.origin) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return res;
-      })
-      .catch(() => caches.match(event.request))
+    caches.match(event.request).then((cached) => {
+      const networkPromise = fetch(event.request)
+        .then((res) => {
+          if (res && res.status === 200 && url.origin === self.location.origin) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return res;
+        })
+        .catch(() => cached);
+      return cached || networkPromise;
+    })
   );
 });
 

@@ -208,7 +208,7 @@
           <button class="btn btn-primary btn-block" id="homeRequestApptBtn" type="button">
             💬 Üzenet az appban (Időpontkérés)
           </button>
-          ${msgUrl ? `<a class="btn btn-messenger btn-block" href="${esc(msgUrl)}" target="_blank" rel="noopener">💬 Írás Facebook Messengeren</a>` : ''}
+          ${msgUrl ? `<a class="btn btn-messenger btn-block" href="${esc(msgUrl)}" data-messenger-open="1">💬 Írás Facebook Messengeren</a>` : ''}
           <a class="btn btn-secondary btn-block" href="tel:${esc(phoneRaw)}">📞 Hívás: ${esc(phoneDisp)}</a>
         </div>
       `;
@@ -237,7 +237,12 @@
       // Időpont napján aktív 10 perc késés gomb (más napokon inaktív tájékoztatóként látható, hogy a vendég mindig tudja, hol találja)
       lateWrap.classList.remove('hidden');
       if (isToday) {
-        if (nextAppt.lateNotice) {
+        if (nextAppt.lateAcknowledged && !nextAppt.lateNotice) {
+          lateBtn.disabled = true;
+          lateBtn.className = 'btn btn-secondary btn-block';
+          lateBtn.textContent = '✓ A fodrászod nyugtázta a 10 perces késést';
+          lateStatus.textContent = 'Nyugodtan érkezz, várunk!';
+        } else if (nextAppt.lateNotice) {
           lateBtn.disabled = true;
           lateBtn.className = 'btn btn-secondary btn-block';
           lateBtn.textContent = '✓ 10 perces késés elküldve a fodrászodnak';
@@ -756,19 +761,50 @@
     populateSosServices();
   }
 
-  function buildMessengerUrl(raw) {
+  function extractMessengerHandle(raw) {
     const val = String(raw || '').trim();
     if (!val) return '';
-    if (/^https?:\/\/(m\.me|messenger\.com)\//i.test(val)) return val;
-    if (/^(www\.)?(m\.me|messenger\.com)\//i.test(val)) return `https://${val.replace(/^www\./i, '')}`;
     const idMatch = val.match(/profile\.php\?[^#]*id=(\d+)/i);
-    if (idMatch && idMatch[1]) return `https://m.me/${idMatch[1]}`;
-    const fbMatch = val.match(/facebook\.com\/([^/?#]+)/i);
-    if (fbMatch && fbMatch[1] && fbMatch[1] !== 'profile.php') {
-      return `https://m.me/${fbMatch[1]}`;
-    }
-    if (/^https?:\/\//i.test(val)) return val;
-    return `https://m.me/${val.replace(/^@/, '')}`;
+    if (idMatch && idMatch[1]) return idMatch[1];
+    const mMatch = val.match(/(?:m\.me|messenger\.com\/t|facebook\.com)\/([^/?#]+)/i);
+    if (mMatch && mMatch[1] && mMatch[1] !== 'profile.php') return mMatch[1];
+    return val.replace(/^https?:\/\//i, '').replace(/^@/, '').replace(/\/.*$/, '');
+  }
+
+  function buildMessengerUrl(raw) {
+    const handle = extractMessengerHandle(raw);
+    if (!handle) return '';
+    return `https://m.me/${handle}`;
+  }
+
+  // iOS-en a sima m.me link PWA-ból az App Store-ba dobja a felhasználót akkor is, ha fenn van a Messenger!
+  // Ez a függvény iOS-en közvetlenül a natív fb-messenger:// protokollal indítja el a Messenger appot.
+  function openMessengerSmart(event) {
+    const handle = extractMessengerHandle(state.contact && state.contact.messengerHandle);
+    if (!handle) return;
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (!isIos) return; // Androidon és asztalin az m.me link hibátlanul nyitja!
+
+    event.preventDefault();
+    const isNumericId = /^\d+$/.test(handle);
+    const nativeUrl = isNumericId
+      ? `fb-messenger://user-thread/${handle}`
+      : `fb-messenger://user/${handle}`;
+    const webFallback = `https://www.messenger.com/t/${handle}`;
+
+    let leftApp = false;
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') leftApp = true;
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.location.href = nativeUrl;
+
+    setTimeout(() => {
+      document.removeEventListener('visibilitychange', onVis);
+      if (!leftApp && document.visibilityState === 'visible') {
+        window.location.href = webFallback;
+      }
+    }, 1300);
   }
 
   function openGuestChat(forceOpen) {
@@ -800,6 +836,9 @@
     if (msgLink) {
       if (msgUrl) {
         msgLink.href = msgUrl;
+        if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+          msgLink.removeAttribute('target');
+        }
         msgLink.classList.remove('hidden');
       } else {
         msgLink.classList.add('hidden');
@@ -807,6 +846,14 @@
     }
 
     const unread = Number(state.guest && state.guest.unreadForGuest) || 0;
+    const hdrCount = $('#guestHeaderChatCount');
+    const hdrBtn = $('#guestHeaderChatBtn');
+    if (hdrCount) hdrCount.textContent = String(unread);
+    if (hdrBtn) {
+      hdrBtn.style.borderColor = unread > 0 ? '#EF4444' : '';
+      hdrBtn.style.background = unread > 0 ? 'rgba(220, 38, 38, 0.28)' : '';
+      hdrBtn.style.color = unread > 0 ? '#FFFFFF' : '';
+    }
     const badge = $('#guestChatUnreadBadge');
     if (badge) {
       badge.classList.toggle('hidden', unread <= 0);
@@ -1107,6 +1154,19 @@
       $('#photoDisclosure').classList.remove('open');
     });
 
+    // Fejléc boríték gomb + iOS Messenger natív megnyitó
+    const guestHdrChat = $('#guestHeaderChatBtn');
+    if (guestHdrChat) {
+      guestHdrChat.addEventListener('click', () => {
+        switchTab('appointments');
+        openGuestChat(true);
+      });
+    }
+    document.addEventListener('click', (e) => {
+      const mBtn = e.target.closest('#guestMessengerLink, [data-messenger-open]');
+      if (mBtn) openMessengerSmart(e);
+    });
+
     // Alkalmazáson belüli chat események
     const toggleChatBtn = $('#toggleGuestChatBtn');
     if (toggleChatBtn) {
@@ -1297,10 +1357,12 @@
       }
       prevUnreadForGuest = newUnread;
       guestLoaded = true;
+      const prevRoutineKey = state.guest ? JSON.stringify(state.guest.savedRoutine || null) + '|' + state.guest.theme : '';
+      const nextRoutineKey = JSON.stringify(guest.savedRoutine || null) + '|' + guest.theme;
       state.guest = guest;
       applyTheme(guest.theme || localStorage.getItem(GUEST_THEME_KEY) || 'male');
       renderHome();
-      renderHaircare();
+      if (prevRoutineKey !== nextRoutineKey) renderHaircare();
       renderAppointmentsTab();
       if (state.chatOpen && newUnread > 0) {
         window.SalonService.markChatRead(state.guestId, 'guest');
@@ -1393,8 +1455,11 @@
       pb.classList.remove('hidden');
     }
 
-    // Háttérben frissítsük a naptárat, ha az Apps Script be van állítva
-    if (window.SalonService.isAppsScriptConfigured()) {
+    // Háttérben frissítsük a naptárat legfeljebb 10 percenként (gyorsabb indulás!)
+    const lastSyncKey = 'forfex_last_cal_sync_v1';
+    const lastSync = Number(localStorage.getItem(lastSyncKey) || 0);
+    if (window.SalonService.isAppsScriptConfigured() && Date.now() - lastSync > 10 * 60 * 1000) {
+      localStorage.setItem(lastSyncKey, String(Date.now()));
       window.SalonService.triggerCalendarSync();
     }
   }
@@ -1450,13 +1515,8 @@
     if (!state.guestId) {
       setupOnboarding();
     } else {
-      const existing = await window.SalonService.getGuest(state.guestId);
-      if (!existing) {
-        localStorage.removeItem(GUEST_ID_KEY);
-        setupOnboarding();
-      } else {
-        startSubscriptions();
-      }
+      // Azonnali feliratkozás (offline Firestore cache-ből 10ms alatt rajzol, nem várakozik blokkoló get()-re!)
+      startSubscriptions();
     }
   }
 

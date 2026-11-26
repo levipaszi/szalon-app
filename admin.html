@@ -11,10 +11,12 @@
   <link rel="manifest" href="./admin-manifest.json?v=3" />
   <link rel="icon" href="./icons/admin-icon.svg?v=3" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="./icons/admin-192.png?v=3" />
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/styles.css?v=18" />
+  <link rel="stylesheet" href="./css/styles.css?v=19" />
 </head>
 <body>
   <!-- Fejléc -->
@@ -25,9 +27,9 @@
         <span class="brand-subtitle">Fodrász Vezérlőpult</span>
       </div>
       <div class="header-actions">
-        <button class="icon-btn" id="adminHeaderChatBtn" type="button" title="Üzenetek">
-          <span>💬</span>
-          <span id="adminHeaderChatCount">0</span>
+        <button class="icon-btn" id="adminHeaderChatBtn" type="button" title="Olvasatlan üzenetek" style="position:relative;">
+          <span>✉️</span>
+          <span id="adminHeaderChatCount" style="font-weight:700;">0</span>
         </button>
         <button class="icon-btn hidden" id="adminInstallHeaderBtn" type="button" title="Telepítés a telefon asztalára">
           <span>📲</span>
@@ -392,10 +394,10 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
-  <script src="./js/config.js?v=18"></script>
-  <script src="./js/firebase-service.js?v=18"></script>
-  <script src="./js/pwa-ux.js?v=18"></script>
-  <script src="./js/qrcode-gen.js?v=18"></script>
-  <script src="./js/admin.js?v=18"></script>
+  <script src="./js/config.js?v=19"></script>
+  <script src="./js/firebase-service.js?v=19"></script>
+  <script src="./js/pwa-ux.js?v=19"></script>
+  <script src="./js/qrcode-gen.js?v=19"></script>
+  <script src="./js/admin.js?v=19"></script>
 </body>
 </html>

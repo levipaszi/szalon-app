@@ -658,6 +658,26 @@
     });
   }
 
+  async function deleteSosRequest(sosId) {
+    if (!sosId) return;
+    if (demoMode) {
+      const state = loadDemoDB();
+      delete state.sosRequests[sosId];
+      saveDemoDB(state);
+      return;
+    }
+    await db.collection('sosRequests').doc(sosId).delete();
+  }
+
+  async function dismissLateNotice(apptId) {
+    if (!apptId) return;
+    await updateAppointmentMeta(apptId, {
+      lateNotice: false,
+      lateAcknowledged: true,
+      lateDismissedAt: new Date().toISOString()
+    });
+  }
+
   // ---------------- VIP VILLÁM-IDŐPONTOK ----------------
   async function createFlashSlot(slot) {
     const id = genId('flash');
@@ -839,31 +859,29 @@
       else g.unreadForGuest = (Number(g.unreadForGuest) || 0) + 1;
       saveDemoDB(state);
     } else {
+      // Egyetlen atomi írás (0 extra olvasás!) -> azonnali (<20ms) megjelenés és gyors szinkron
       const ref = db.collection('guests').doc(guestId);
-      const snap = await ref.get();
-      const data = snap.exists ? snap.data() : {};
-      const list = Array.isArray(data.chatMessages) ? data.chatMessages.slice(-49) : [];
-      list.push(msg);
       const patch = {
-        chatMessages: list,
+        chatMessages: firebase.firestore.FieldValue.arrayUnion(msg),
         lastMessageAt: msg.createdAt,
         lastMessagePreview: trimmed.slice(0, 90)
       };
       if (senderRole === 'guest') {
-        patch.unreadForAdmin = (Number(data.unreadForAdmin) || 0) + 1;
+        patch.unreadForAdmin = firebase.firestore.FieldValue.increment(1);
       } else {
-        patch.unreadForGuest = (Number(data.unreadForGuest) || 0) + 1;
+        patch.unreadForGuest = firebase.firestore.FieldValue.increment(1);
       }
       await ref.set(patch, { merge: true });
     }
 
+    // Push értesítés a háttérben (nem blokkolja a chat felületet!)
     if (senderRole === 'guest') {
       sendPushNotification({
         targetRole: 'admin',
         title: `💬 Új üzenet: ${guestName || 'Vendég'}`,
         body: trimmed.slice(0, 120),
         url: './admin.html'
-      });
+      }).catch(() => {});
     } else {
       sendPushNotification({
         targetRole: 'guest',
@@ -871,7 +889,7 @@
         title: `💬 Válasz érkezett (${global.APP_CONFIG.SALON_NAME})`,
         body: trimmed.slice(0, 120),
         url: './index.html#appointments'
-      });
+      }).catch(() => {});
     }
     return msg;
   }
@@ -955,6 +973,8 @@
     subscribeGuestSos,
     subscribeAllSos,
     respondSosRequest,
+    deleteSosRequest,
+    dismissLateNotice,
     createFlashSlot,
     subscribeFlashSlots,
     applyToFlashSlot,

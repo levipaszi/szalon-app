@@ -7,6 +7,7 @@
 
   const SESSION_UNLOCK_KEY = 'atelier_admin_unlocked_v1';
   const BIO_CRED_KEY = 'forfex_admin_bio_cred_v1';
+  const PIN_CACHE_KEY = 'forfex_admin_pin_cache_v1';
 
   const state = {
     adminConfig: { pinHash: '' },
@@ -325,6 +326,7 @@
       const hash = await window.SalonService.hashPin(pin);
       await window.SalonService.saveAdminPinHash(hash);
       state.adminConfig.pinHash = hash;
+      localStorage.setItem(PIN_CACHE_KEY, hash);
       sessionStorage.setItem(SESSION_UNLOCK_KEY, '1');
       $('#pinOverlay').classList.add('hidden');
       showToast('Admin PIN-kód elmentve!');
@@ -398,7 +400,8 @@
           : `<span class="badge badge-female">● Női</span>`;
 
         const lateBadge = appt.lateNotice
-          ? `<span class="badge badge-danger">⏱️ +10 perc késés!</span>`
+          ? `<span class="badge badge-danger">⏱️ +10 perc késés!</span>
+             <button class="btn btn-sm btn-ghost" style="min-height:28px;padding:2px 8px;font-size:0.76rem;" type="button" data-dismiss-late="${appt.id}">✕ Törlés</button>`
           : '';
 
         const photoBlock = appt.photoDataUrl || appt.photoNote
@@ -452,6 +455,13 @@
       btn.addEventListener('click', () => openAdminChat(btn.dataset.calChat));
     });
 
+    $$('[data-dismiss-late]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await window.SalonService.dismissLateNotice(btn.dataset.dismissLate);
+        showToast('10 perces késés jelzés törölve.');
+      });
+    });
+
     $$('[data-open-reminder]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const appt = state.appointments.find((a) => a.id === btn.dataset.openReminder);
@@ -469,7 +479,7 @@
   function renderFlashAndSos() {
     const sosList = $('#adminSosList');
     const pendingSos = state.sosRequests.filter((r) => r.status === 'pending');
-    const historySos = state.sosRequests.filter((r) => r.status !== 'pending').slice(0, 5);
+    const historySos = state.sosRequests.filter((r) => r.status !== 'pending').slice(0, 25);
     renderAdminUrgentAlerts();
 
     let sosHtml = '';
@@ -480,7 +490,10 @@
           <div class="card" style="border:1.5px solid rgba(220,38,38,0.55);background:linear-gradient(155deg,var(--surface),rgba(220,38,38,0.08));">
             <div class="row-between">
               <span class="badge badge-danger">🚨 ÚJ SOS KÉRÉS (4x ár)</span>
-              <span class="badge ${req.gender === 'male' ? 'badge-male' : 'badge-female'}">${req.gender === 'male' ? 'Férfi' : 'Női'}</span>
+              <div class="row-gap">
+                <span class="badge ${req.gender === 'male' ? 'badge-male' : 'badge-female'}">${req.gender === 'male' ? 'Férfi' : 'Női'}</span>
+                <button class="btn btn-sm btn-ghost" style="min-height:32px;padding:4px 8px;" type="button" data-delete-sos="${req.id}" title="SOS kérés törlése">🗑</button>
+              </div>
             </div>
             <h3 class="mt-1">${esc(req.guestName)}</h3>
             <p class="mt-1"><strong>${esc(req.serviceName)}</strong> · <span style="color:#EF4444;font-weight:700;">${formatHuf(req.sosPrice)}</span></p>
@@ -507,7 +520,7 @@
 
     if (historySos.length) {
       sosHtml += `
-        <div class="disclosure" id="sosHistoryDisc" style="margin-bottom:16px;">
+        <div class="disclosure open" id="sosHistoryDisc" style="margin-bottom:16px;">
           <button class="disclosure-trigger" type="button" data-disclosure="sosHistoryDisc">
             <span>Korábbi SOS döntések (${historySos.length})</span>
             <span class="disclosure-chevron">▾</span>
@@ -517,14 +530,20 @@
               .map(
                 (r) => `
                 <div class="appt-list-item">
-                  <div>
+                  <div style="min-width:0;flex:1;">
                     <div style="font-weight:600;font-size:0.9rem;">${esc(r.guestName)} – ${esc(r.serviceName)}</div>
                     <div class="small muted">${esc(r.intervalSummary)} · ${formatHuf(r.sosPrice)}</div>
                   </div>
-                  <span class="badge ${r.status === 'approved' ? 'badge-success' : ''}">${r.status === 'approved' ? 'Elfogadva' : 'Elutasítva'}</span>
+                  <div class="row-gap" style="flex-shrink:0;">
+                    <span class="badge ${r.status === 'approved' ? 'badge-success' : ''}">${r.status === 'approved' ? 'Elfogadva' : 'Elutasítva'}</span>
+                    <button class="btn btn-sm btn-ghost" style="min-height:34px;padding:4px 8px;" type="button" data-delete-sos="${r.id}" title="Törlés">🗑</button>
+                  </div>
                 </div>`
               )
               .join('')}
+            <button class="btn btn-ghost btn-sm btn-block mt-2" id="clearAllResolvedSosBtn" type="button">
+              🗑 Összes lezárt SOS törlése
+            </button>
           </div>
         </div>`;
     }
@@ -541,6 +560,23 @@
         );
       });
     });
+
+    $$('[data-delete-sos]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!window.confirm('Biztosan törlöd ezt az SOS bejegyzést?')) return;
+        await window.SalonService.deleteSosRequest(btn.dataset.deleteSos);
+        showToast('SOS bejegyzés törölve!');
+      });
+    });
+
+    const clearAllSosBtn = $('#clearAllResolvedSosBtn');
+    if (clearAllSosBtn) {
+      clearAllSosBtn.addEventListener('click', async () => {
+        if (!window.confirm(`Biztosan törlöd mind a(z) ${historySos.length} lezárt SOS bejegyzést?`)) return;
+        await Promise.all(historySos.map((r) => window.SalonService.deleteSosRequest(r.id)));
+        showToast('Összes lezárt SOS törölve!');
+      });
+    }
 
     // Villám-időpontok és jelentkezők
     const flashList = $('#adminFlashSlotsList');
@@ -1415,6 +1451,7 @@
       const hash = await window.SalonService.hashPin(p1);
       await window.SalonService.saveAdminPinHash(hash);
       state.adminConfig.pinHash = hash;
+      localStorage.setItem(PIN_CACHE_KEY, hash);
       $('#newPinInput').value = '';
       $('#confirmNewPinInput').value = '';
       showToast('Admin PIN-kód sikeresen megváltoztatva!');
@@ -1447,7 +1484,7 @@
       });
     });
 
-    // 2. Mai 10 perces késések
+    // 2. Mai 10 perces késések (közvetlen Törlés gombbal a sávon!)
     const lateToday = state.appointments.filter(
       (a) => a.lateNotice && isSameDay(new Date(a.startIso), now)
     );
@@ -1458,8 +1495,13 @@
         icon: '⏱️',
         title: `+10 PERC KÉSÉS: ${g.name || a.title || 'Vendég'}`,
         subtitle: `Mai időpont: ${formatTimeRange(a.startIso, a.endIso)}`,
-        cta: 'Naptár',
-        onClick: () => switchAdminTab('calendar')
+        cta: '✓ Törlés',
+        onClick: async () => {
+          await window.SalonService.dismissLateNotice(a.id);
+          showToast('Késés jelzés törölve.');
+        },
+        secondaryCta: 'Naptár',
+        onSecondaryClick: () => switchAdminTab('calendar')
       });
     });
 
@@ -1508,6 +1550,14 @@
     }
 
     const totalUnreadMsgs = unreadGuests.reduce((acc, g) => acc + (Number(g.unreadForAdmin) || 0), 0);
+    const hdrCount = $('#adminHeaderChatCount');
+    const hdrBtn = $('#adminHeaderChatBtn');
+    if (hdrCount) hdrCount.textContent = String(totalUnreadMsgs);
+    if (hdrBtn) {
+      hdrBtn.style.borderColor = totalUnreadMsgs > 0 ? '#EF4444' : '';
+      hdrBtn.style.background = totalUnreadMsgs > 0 ? 'rgba(220, 38, 38, 0.28)' : '';
+      hdrBtn.style.color = totalUnreadMsgs > 0 ? '#FFFFFF' : '';
+    }
     window.PwaUX.renderUrgentStack('adminUrgentStack', alerts);
     window.PwaUX.setNavBadge('adminCalNavBadge', lateToday.length, lateToday.length > 0);
     window.PwaUX.setNavBadge('adminSosNavBadge', pendingSos.length + flashApplicantsCount, pendingSos.length > 0 || flashApplicantsCount > 0);
@@ -1715,13 +1765,33 @@
     bindEvents();
     updateBioSettingsUI();
 
-    state.adminConfig = await window.SalonService.getAdminConfig();
-
-    if (state.adminConfig.pinHash && sessionStorage.getItem(SESSION_UNLOCK_KEY) === '1') {
-      $('#pinOverlay').classList.add('hidden');
-      startAdminSubscriptions();
+    // Gyors indulás gyorsítótárazott PIN hash-sel (0ms várakozás), háttérben frissítve
+    const cachedPinHash = localStorage.getItem(PIN_CACHE_KEY) || '';
+    if (cachedPinHash) {
+      state.adminConfig = { pinHash: cachedPinHash };
+      if (sessionStorage.getItem(SESSION_UNLOCK_KEY) === '1') {
+        $('#pinOverlay').classList.add('hidden');
+        startAdminSubscriptions();
+      } else {
+        configurePinScreen();
+      }
+      window.SalonService.getAdminConfig().then((cfg) => {
+        if (cfg && cfg.pinHash) {
+          state.adminConfig = cfg;
+          localStorage.setItem(PIN_CACHE_KEY, cfg.pinHash);
+        }
+      }).catch(() => {});
     } else {
-      configurePinScreen();
+      state.adminConfig = await window.SalonService.getAdminConfig();
+      if (state.adminConfig && state.adminConfig.pinHash) {
+        localStorage.setItem(PIN_CACHE_KEY, state.adminConfig.pinHash);
+      }
+      if (state.adminConfig.pinHash && sessionStorage.getItem(SESSION_UNLOCK_KEY) === '1') {
+        $('#pinOverlay').classList.add('hidden');
+        startAdminSubscriptions();
+      } else {
+        configurePinScreen();
+      }
     }
   }
 
