@@ -7,7 +7,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'forfex-vip-v1.3.0';
+const CACHE_NAME = 'forfex-vip-v1.3.1';
 const APP_SHELL = [
   './',
   './index.html',
@@ -106,6 +106,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   if (
+    url.pathname.endsWith('manifest.json') ||
     url.hostname.includes('firestore.googleapis.com') ||
     url.hostname.includes('firebase') ||
     url.hostname.includes('script.google.com') ||
