@@ -198,13 +198,18 @@
       const pairingHint = !state.guest.paired
         ? 'A profilod párosításra vár – amint a fodrászod összeköti a neveddel a Google Naptárt, minden időpontod élőben megjelenik itt.'
         : 'Jelenleg nincs lefoglalt időpontod a naptárban.';
+      const msgUrl = buildMessengerUrl(state.contact && state.contact.messengerHandle);
+      const phoneRaw = (state.contact && state.contact.phoneRaw) || window.APP_CONFIG.SOS_PHONE_RAW;
+      const phoneDisp = (state.contact && state.contact.phoneDisplay) || window.APP_CONFIG.SOS_PHONE_DISPLAY;
       nextContent.innerHTML = `
         <p class="muted mt-1">${esc(pairingHint)}</p>
         <div class="no-appt-cta">
           <strong style="font-size:0.95rem;">Szeretnél új időpontot foglalni?</strong>
           <button class="btn btn-primary btn-block" id="homeRequestApptBtn" type="button">
-            📅 Időpontot szeretnék kérni
+            💬 Üzenet az appban (Időpontkérés)
           </button>
+          ${msgUrl ? `<a class="btn btn-messenger btn-block" href="${esc(msgUrl)}" target="_blank" rel="noopener">💬 Írás Facebook Messengeren</a>` : ''}
+          <a class="btn btn-secondary btn-block" href="tel:${esc(phoneRaw)}">📞 Hívás: ${esc(phoneDisp)}</a>
         </div>
       `;
       const reqBtn = $('#homeRequestApptBtn');
@@ -755,6 +760,9 @@
     const val = String(raw || '').trim();
     if (!val) return '';
     if (/^https?:\/\/(m\.me|messenger\.com)\//i.test(val)) return val;
+    if (/^(www\.)?(m\.me|messenger\.com)\//i.test(val)) return `https://${val.replace(/^www\./i, '')}`;
+    const idMatch = val.match(/profile\.php\?[^#]*id=(\d+)/i);
+    if (idMatch && idMatch[1]) return `https://m.me/${idMatch[1]}`;
     const fbMatch = val.match(/facebook\.com\/([^/?#]+)/i);
     if (fbMatch && fbMatch[1] && fbMatch[1] !== 'profile.php') {
       return `https://m.me/${fbMatch[1]}`;
@@ -1297,6 +1305,7 @@
     window.SalonService.subscribeContactSettings((contact) => {
       state.contact = contact;
       renderGuestContactAndChat();
+      renderHome();
     });
 
     window.SalonService.subscribeGuestAppointments(state.guestId, (appts) => {

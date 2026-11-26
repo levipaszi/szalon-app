@@ -248,12 +248,21 @@
 
             ${photoBlock}
 
-            <button class="btn btn-secondary btn-block mt-2" type="button" data-open-reminder="${appt.id}">
-              🔔 Emlékeztető küldése
-            </button>
+            <div class="row-gap mt-2">
+              <button class="btn btn-secondary" style="flex:1;" type="button" data-open-reminder="${appt.id}">
+                🔔 Emlékeztető
+              </button>
+              <button class="btn btn-primary" type="button" data-cal-chat="${appt.guestId}">
+                💬 Üzenet
+              </button>
+            </div>
           </div>`;
       })
       .join('');
+
+    $$('[data-cal-chat]').forEach((btn) => {
+      btn.addEventListener('click', () => openAdminChat(btn.dataset.calChat));
+    });
 
     $$('[data-open-reminder]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -421,8 +430,99 @@
     });
   }
 
-  // ---------------- 3. VENDÉGEK & PÁROSÍTÁS ----------------
+  // ---------------- 3. ÜZENETEK (INBOX) & VENDÉGEK ----------------
+  function renderMessagesInbox() {
+    const inboxEl = $('#adminMessagesInbox');
+    if (!inboxEl) return;
+
+    const sortedAll = state.guests.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hu'));
+    const withChats = state.guests
+      .filter((g) => (Array.isArray(g.chatMessages) && g.chatMessages.length > 0) || Number(g.unreadForAdmin) > 0)
+      .sort((a, b) => {
+        const ua = Number(a.unreadForAdmin) || 0;
+        const ub = Number(b.unreadForAdmin) || 0;
+        if (ua !== ub) return ub - ua;
+        return new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0);
+      });
+
+    const totalUnread = withChats.reduce((sum, g) => sum + (Number(g.unreadForAdmin) || 0), 0);
+    const hdrCount = $('#adminHeaderChatCount');
+    const hdrBtn = $('#adminHeaderChatBtn');
+    if (hdrCount) hdrCount.textContent = String(totalUnread);
+    if (hdrBtn) {
+      hdrBtn.style.borderColor = totalUnread > 0 ? '#EF4444' : '';
+      hdrBtn.style.background = totalUnread > 0 ? 'rgba(220, 38, 38, 0.22)' : '';
+    }
+
+    const startNewBlock = sortedAll.length
+      ? `
+        <div class="row-gap mt-2">
+          <select class="select" id="newChatGuestSelect" style="flex:1;">
+            <option value="">Válassz vendéget új beszélgetéshez...</option>
+            ${sortedAll.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}
+          </select>
+          <button class="btn btn-primary btn-sm" id="startNewChatBtn" type="button">💬 Írás</button>
+        </div>`
+      : '<p class="small muted mt-1">Még nincs regisztrált vendég.</p>';
+
+    const listBlock = !withChats.length
+      ? '<p class="small muted mt-2">Még nincs beérkező üzenet. A fenti listából bármelyik vendéggel kezdeményezhetsz beszélgetést!</p>'
+      : withChats
+          .map((g) => {
+            const unread = Number(g.unreadForAdmin) || 0;
+            const timeStr = g.lastMessageAt
+              ? new Date(g.lastMessageAt).toLocaleString('hu-HU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+              : '';
+            return `
+              <div class="appt-list-item mt-1" style="${unread > 0 ? 'border-color:#EF4444;background:rgba(220,38,38,0.1);' : ''}">
+                <div style="min-width:0;flex:1;">
+                  <div class="row-gap">
+                    <strong>${esc(g.name)}</strong>
+                    ${unread > 0 ? `<span class="badge badge-danger">${unread} új</span>` : ''}
+                    ${timeStr ? `<span class="small muted">${esc(timeStr)}</span>` : ''}
+                  </div>
+                  <div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">
+                    ${esc(g.lastMessagePreview || 'Üzenet megnyitása...')}
+                  </div>
+                </div>
+                <button class="btn btn-sm ${unread > 0 ? 'btn-danger' : 'btn-primary'}" type="button" data-inbox-open="${g.id}">
+                  ${unread > 0 ? 'Válasz' : 'Megnyitás'}
+                </button>
+              </div>`;
+          })
+          .join('');
+
+    inboxEl.innerHTML = `
+      <div class="card card-accent">
+        <div class="row-between">
+          <span class="card-eyebrow">💬 Üzenetek Központ</span>
+          ${totalUnread > 0 ? `<span class="badge badge-danger">${totalUnread} olvasatlan</span>` : `<span class="badge">${withChats.length} beszélgetés</span>`}
+        </div>
+        <h2 class="card-title">Beszélgetések &amp; Új üzenet</h2>
+        ${startNewBlock}
+        <div class="mt-2">${listBlock}</div>
+      </div>
+    `;
+
+    const startBtn = $('#startNewChatBtn');
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        const gid = $('#newChatGuestSelect').value;
+        if (!gid) {
+          showToast('Válassz ki egy vendéget a listából!');
+          return;
+        }
+        openAdminChat(gid);
+      });
+    }
+
+    $$('[data-inbox-open]').forEach((btn) => {
+      btn.addEventListener('click', () => openAdminChat(btn.dataset.inboxOpen));
+    });
+  }
+
   function renderGuests() {
+    renderMessagesInbox();
     const pending = state.guests.filter((g) => !g.paired);
     const paired = state.guests.filter((g) => g.paired).sort((a, b) => a.name.localeCompare(b.name, 'hu'));
     renderAdminUrgentAlerts();
@@ -773,6 +873,11 @@
       });
     });
 
+    // Fejléc Üzenetek gomb
+    $('#adminHeaderChatBtn').addEventListener('click', () => {
+      switchAdminTab('guests');
+    });
+
     // Szinkron & Zárolás
     $('#adminSyncBtn').addEventListener('click', async () => {
       showToast('Google Naptár szinkronizálása...');
@@ -860,14 +965,39 @@
     });
 
     // Elérhetőségek & Messenger mentése
+    const normalizeMessengerUrl = (raw) => {
+      const val = String(raw || '').trim();
+      if (!val) return '';
+      if (/^https?:\/\/(m\.me|messenger\.com)\//i.test(val)) return val;
+      if (/^(www\.)?(m\.me|messenger\.com)\//i.test(val)) return `https://${val.replace(/^www\./i, '')}`;
+      const idMatch = val.match(/profile\.php\?[^#]*id=(\d+)/i);
+      if (idMatch && idMatch[1]) return `https://m.me/${idMatch[1]}`;
+      const fbMatch = val.match(/facebook\.com\/([^/?#]+)/i);
+      if (fbMatch && fbMatch[1] && fbMatch[1] !== 'profile.php') return `https://m.me/${fbMatch[1]}`;
+      if (/^https?:\/\//i.test(val)) return val;
+      return `https://m.me/${val.replace(/^@/, '')}`;
+    };
+
+    const updateMessengerPreview = () => {
+      const prev = $('#adminMessengerPreview');
+      if (!prev) return;
+      const url = normalizeMessengerUrl($('#adminMessengerInput').value);
+      prev.innerHTML = url
+        ? `Aktív vendég link: <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)} ↗</a>`
+        : 'Üresen hagyva a Messenger gomb rejtve marad a vendégeknél.';
+    };
+    $('#adminMessengerInput').addEventListener('input', updateMessengerPreview);
+
     $('#saveContactSettingsBtn').addEventListener('click', async () => {
       const phoneDisp = ($('#adminContactPhoneInput').value || '').trim();
-      const messenger = ($('#adminMessengerInput').value || '').trim();
+      const messengerRaw = ($('#adminMessengerInput').value || '').trim();
+      const normalized = normalizeMessengerUrl(messengerRaw);
       await window.SalonService.saveContactSettings({
         phoneRaw: phoneDisp.replace(/[^+\d]/g, '') || window.APP_CONFIG.SOS_PHONE_RAW,
         phoneDisplay: phoneDisp || window.APP_CONFIG.SOS_PHONE_DISPLAY,
-        messengerHandle: messenger
+        messengerHandle: normalized || messengerRaw
       });
+      updateMessengerPreview();
       showToast('Telefonszám és Messenger link elmentve!');
     });
 
@@ -1139,6 +1269,10 @@
       const mInp = $('#adminMessengerInput');
       if (pInp && document.activeElement !== pInp) pInp.value = contact.phoneDisplay || '';
       if (mInp && document.activeElement !== mInp) mInp.value = contact.messengerHandle || '';
+      const prev = $('#adminMessengerPreview');
+      if (prev && contact.messengerHandle) {
+        prev.innerHTML = `Aktív vendég link: <a href="${esc(contact.messengerHandle)}" target="_blank" rel="noopener">${esc(contact.messengerHandle)} ↗</a>`;
+      }
     });
 
     let apptsLoaded = false;

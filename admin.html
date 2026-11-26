@@ -25,13 +25,16 @@
         <span class="brand-subtitle">Fodrász Vezérlőpult</span>
       </div>
       <div class="header-actions">
+        <button class="icon-btn" id="adminHeaderChatBtn" type="button" title="Üzenetek">
+          <span>💬</span>
+          <span id="adminHeaderChatCount">0</span>
+        </button>
         <button class="icon-btn hidden" id="adminInstallHeaderBtn" type="button" title="Telepítés a telefon asztalára">
           <span>📲</span>
           <span>App</span>
         </button>
         <button class="icon-btn" id="adminSyncBtn" type="button" title="Google Naptár szinkronizálása">
           <span>🔄</span>
-          <span>Szinkron</span>
         </button>
         <button class="icon-btn" id="adminLockBtn" type="button" title="Zárolás">🔒</button>
       </div>
@@ -115,13 +118,14 @@
       <div id="adminFlashSlotsList"></div>
     </section>
 
-    <!-- ==================== 3. VENDÉGEK ==================== -->
-    <section id="admin-tab-guests" class="tab-section" aria-label="Vendégek">
+    <!-- ==================== 3. VENDÉGEK & ÜZENETEK ==================== -->
+    <section id="admin-tab-guests" class="tab-section" aria-label="Vendégek és Üzenetek">
       <div class="section-heading">
-        <h1>Vendégek &amp; Párosítás</h1>
-        <p>Új regisztrálók összekötése a Google Naptár kulcsszóval, ciklusidők és időtartamok.</p>
+        <h1>Üzenetek &amp; Vendégek</h1>
+        <p>Beérkező üzenetek, új beszélgetés indítása és vendégek párosítása.</p>
       </div>
 
+      <div id="adminMessagesInbox"></div>
       <div id="adminPendingGuests"></div>
       <div id="adminAllGuests"></div>
     </section>
@@ -185,8 +189,9 @@
           <input class="input" type="tel" id="adminContactPhoneInput" placeholder="+36 70 215 5375" />
         </div>
         <div class="form-group">
-          <label class="form-label" for="adminMessengerInput">Messenger felhasználónév vagy m.me link</label>
-          <input class="input" type="text" id="adminMessengerInput" placeholder="Pl. forfexfodraszat vagy https://m.me/forfexfodraszat" />
+          <label class="form-label" for="adminMessengerInput">Messenger felhasználónév vagy m.me / Facebook link</label>
+          <input class="input" type="text" id="adminMessengerInput" placeholder="Pl. forfexfodraszat vagy m.me/forfexfodraszat" />
+          <p class="small muted mt-1" id="adminMessengerPreview"></p>
         </div>
         <button class="btn btn-primary btn-block" id="saveContactSettingsBtn" type="button">
           💾 Elérhetőségek mentése
