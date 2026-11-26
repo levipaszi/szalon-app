@@ -144,21 +144,28 @@
   }
 
   async function registerBiometrics() {
-    const supported = await isBiometricsSupported();
-    if (!supported) {
-      showToast('Ez az eszköz nem támogatja a biometrikus belépést.');
+    const statusEl = $('#adminBioStatusText');
+    if (!window.PublicKeyCredential || !navigator.credentials || !navigator.credentials.create) {
+      const msg = 'Ez a böngésző nem támogatja a WebAuthn biometriát.';
+      if (statusEl) statusEl.textContent = msg;
+      showToast(msg);
       return;
     }
-    try {
-      const challenge = new Uint8Array(32);
-      const userId = new Uint8Array(16);
-      window.crypto.getRandomValues(challenge);
-      window.crypto.getRandomValues(userId);
 
+    // FONTOS: Semmilyen await NEM lehet a navigator.credentials.create() előtt,
+    // különben Android/iOS elveszíti a felhasználói kattintás-jogosultságot!
+    const challenge = new Uint8Array(32);
+    const userId = new Uint8Array(16);
+    window.crypto.getRandomValues(challenge);
+    window.crypto.getRandomValues(userId);
+
+    if (statusEl) statusEl.textContent = '⏳ Ujjlenyomat / Face ID ablak megnyitása...';
+
+    try {
       const cred = await navigator.credentials.create({
         publicKey: {
           challenge,
-          rp: { name: 'Forfex Admin', id: window.location.hostname },
+          rp: { name: 'Forfex Admin' },
           user: { id: userId, name: 'forfex-admin', displayName: 'Forfex Admin' },
           pubKeyCredParams: [
             { alg: -7, type: 'public-key' },
@@ -166,8 +173,11 @@
           ],
           authenticatorSelection: {
             authenticatorAttachment: 'platform',
+            residentKey: 'preferred',
+            requireResidentKey: false,
             userVerification: 'required'
           },
+          attestation: 'none',
           timeout: 60000
         }
       });
@@ -176,26 +186,32 @@
         localStorage.setItem(BIO_CRED_KEY, bufToB64Url(cred.rawId));
         await updateBioSettingsUI();
         showToast('Biometrikus belépés sikeresen bekapcsolva! ✅');
+      } else {
+        if (statusEl) statusEl.textContent = 'Nem érkezett vissza azonosító kulcs a készüléktől.';
       }
     } catch (err) {
+      const detail = err ? `${err.name || 'Hiba'}: ${err.message || ''}` : 'Ismeretlen hiba';
       if (err && err.name === 'NotAllowedError') {
-        showToast('A biometrikus regisztráció megszakítva.');
+        if (statusEl) statusEl.textContent = 'Megszakítva vagy nincs beállítva képernyőzár / ujjlenyomat a telefonon.';
+        showToast('Biometrikus regisztráció megszakítva.');
       } else {
-        showToast('Nem sikerült a biometria beállítása ezen az eszközön.');
+        if (statusEl) statusEl.textContent = `Nem sikerült (${detail})`;
+        showToast('Nem sikerült a biometria beállítása.');
       }
     }
   }
 
   async function loginWithBiometrics(isAutoAttempt) {
     const saved = localStorage.getItem(BIO_CRED_KEY);
-    if (!saved) return false;
+    if (!saved || !navigator.credentials || !navigator.credentials.get) return false;
+
+    const challenge = new Uint8Array(32);
+    window.crypto.getRandomValues(challenge);
+
     try {
-      const challenge = new Uint8Array(32);
-      window.crypto.getRandomValues(challenge);
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge,
-          rpId: window.location.hostname,
           allowCredentials: [
             { id: b64UrlToBuf(saved), type: 'public-key', transports: ['internal'] }
           ],
@@ -212,7 +228,7 @@
       }
     } catch (err) {
       if (!isAutoAttempt) {
-        $('#pinError').textContent = 'A biometrikus azonosítás megszakadt – használd a PIN-kódot vagy próbáld újra.';
+        $('#pinError').textContent = 'A biometrikus azonosítás megszakadt – használd a PIN-kódot vagy koppints újra a gombra.';
       }
     }
     return false;
