@@ -211,9 +211,23 @@
         </div>
       </div>
 
-      <!-- Admin PIN módosítás & Push -->
+      <!-- Admin PIN módosítás & Háttér Push teszt -->
       <div class="card">
-        <div class="card-eyebrow">Biztonság &amp; Értesítések</div>
+        <div class="card-eyebrow">Háttér Értesítések (Zárt alkalmazásnál is!)</div>
+        <h2 class="card-title">Push Értesítés Állapot &amp; Teszt</h2>
+        <p class="muted small mt-1" id="adminPushStatusText">Állapot ellenőrzése...</p>
+        <div class="stack-sm mt-2">
+          <button class="btn btn-primary btn-block" id="adminSyncPushBtn" type="button">
+            🔔 Értesítések bekapcsolása / Eszköz regisztrálása
+          </button>
+          <button class="btn btn-secondary btn-block" id="adminTestPushBtn" type="button">
+            🧪 Teszt Push küldése (5 mp múlva – zárd be az appot!)
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-eyebrow">Biztonság</div>
         <h2 class="card-title">Admin PIN-kód módosítása</h2>
         <div class="form-group mt-2">
           <label class="form-label" for="newPinInput">Új PIN-kód (4–6 számjegy)</label>

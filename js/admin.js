@@ -703,13 +703,36 @@
 
     $('#closeAdminDemo').addEventListener('click', () => $('#adminDemoBanner').classList.add('hidden'));
 
-    $('#adminEnablePushBtn').addEventListener('click', async () => {
+    const handleAdminPushConnect = async () => {
       const res = await window.SalonService.requestPushPermission('admin');
       if (res.ok) {
         $('#adminPushBanner').classList.add('hidden');
-        showToast('Admin értesítések bekapcsolva!');
+        updateAdminPushStatusUI('aktív – ez az eszköz regisztrálva van háttér Push értesítésekre! ✅');
+        showToast('Admin háttér értesítések aktívak!');
       } else {
+        updateAdminPushStatusUI(`nem aktív: ${res.reason || 'nincs engedélyezve'}`);
         showToast(res.reason || 'Nem sikerült az értesítések bekapcsolása.');
+      }
+    };
+    $('#adminEnablePushBtn').addEventListener('click', handleAdminPushConnect);
+    $('#adminSyncPushBtn').addEventListener('click', handleAdminPushConnect);
+
+    $('#adminTestPushBtn').addEventListener('click', async () => {
+      const syncRes = await window.SalonService.syncPushTokenIfGranted('admin');
+      if (!syncRes.ok) {
+        showToast('Előbb kapcsold be az értesítéseket a fenti gombbal!');
+        return;
+      }
+      showToast('Teszt Push elindítva! Zárd be az appot / zárold a kijelzőt — 5 mp múlva csörög!');
+      const res = await window.SalonService.sendPushNotification({
+        targetRole: 'admin',
+        title: '🧪 Háttér Push Teszt SIKERES!',
+        body: 'Szuper! Zárt alkalmazásnál is megérkezett a jelzés erre a telefonra!',
+        url: 'https://levipaszi.github.io/szalon-app/admin.html',
+        delaySeconds: 5
+      });
+      if (!res || !res.ok || res.sent === false) {
+        showToast('A szerver (Apps Script) nem tudta elküldeni — frissítsd a Code.gs-t!');
       }
     });
 
@@ -909,6 +932,11 @@
     window.PwaUX.setNavBadge('adminGuestNavBadge', pendingGuests.length, false);
   }
 
+  function updateAdminPushStatusUI(text) {
+    const el = $('#adminPushStatusText');
+    if (el) el.textContent = `Állapot: ${text}`;
+  }
+
   let subscriptionsStarted = false;
   function startAdminSubscriptions() {
     if (subscriptionsStarted) return;
@@ -1004,8 +1032,27 @@
       renderPricingEditor();
     });
 
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      $('#adminPushBanner').classList.remove('hidden');
+    if (typeof Notification !== 'undefined') {
+      if (Notification.permission === 'granted') {
+        $('#adminPushBanner').classList.add('hidden');
+        window.SalonService.syncPushTokenIfGranted('admin').then((r) => {
+          updateAdminPushStatusUI(
+            r.ok
+              ? 'aktív – ez az eszköz regisztrálva van háttér Push értesítésekre! ✅'
+              : `figyelem: ${r.reason || 'kattints az Eszköz regisztrálása gombra!'}`
+          );
+        });
+      } else if (Notification.permission === 'default') {
+        $('#adminPushBanner').classList.remove('hidden');
+        updateAdminPushStatusUI('még nincs engedélyezve – koppints a Bekapcsolás gombra!');
+      } else {
+        updateAdminPushStatusUI('le van tiltva a böngészőben! A telefon beállításaiban engedélyezd az értesítéseket.');
+      }
+    } else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      const pb = $('#adminPushBanner');
+      pb.innerHTML = '<span><strong>📲 iPhone:</strong> Háttér értesítésekhez előbb add hozzá az Admin oldalt a Főképernyőhöz (Megosztás ⬆️ → Főképernyőhöz adás ＋), és onnan nyisd meg!</span>';
+      pb.classList.remove('hidden');
+      updateAdminPushStatusUI('iPhone-on csak a Főképernyőre telepített ikonból megnyitva működnek a háttér értesítések.');
     }
   }
 

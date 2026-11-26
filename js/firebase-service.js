@@ -257,47 +257,96 @@
     return callAppsScript({ action: 'sync' });
   }
 
-  async function sendPushNotification({ targetRole, guestId, title, body, url }) {
+  function absoluteAppUrl(relPath) {
+    try {
+      return new URL(relPath || './index.html', window.location.href).href;
+    } catch (_) {
+      return 'https://levipaszi.github.io/szalon-app/index.html';
+    }
+  }
+
+  async function sendPushNotification({ targetRole, guestId, title, body, url, delaySeconds }) {
+    const resolvedUrl = url && url.startsWith('https://')
+      ? url
+      : absoluteAppUrl(url || (targetRole === 'admin' ? './admin.html' : './index.html'));
     return callAppsScript({
       action: 'sendPush',
       targetRole: targetRole || 'guest',
       guestId: guestId || '',
       title,
       body,
-      url: url || (targetRole === 'admin' ? './admin.html' : './index.html')
+      url: resolvedUrl,
+      delaySeconds: Number(delaySeconds) || 0
     });
+  }
+
+  async function getUnifiedSwRegistration() {
+    if (!('serviceWorker' in navigator)) return null;
+    const reg = await navigator.serviceWorker.register('./sw.js');
+    await navigator.serviceWorker.ready;
+    return reg;
+  }
+
+  async function saveTokenForRole(role, guestId, token) {
+    if (!token) return;
+    if (role === 'admin') {
+      await saveAdminFcmToken(token);
+    } else if (guestId) {
+      if (demoMode) {
+        await updateGuest(guestId, { fcmToken: token });
+      } else {
+        await db.collection('guests').doc(guestId).set({
+          fcmToken: token,
+          fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
+          fcmUpdatedAt: new Date().toISOString()
+        }, { merge: true });
+      }
+    }
+  }
+
+  async function syncPushTokenIfGranted(role, guestId) {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      return { ok: false, permission: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported' };
+    }
+    if (demoMode || !messaging) {
+      return { ok: false, reason: 'Messaging nem aktív ezen a böngészőn.' };
+    }
+    const vapid = global.APP_CONFIG.VAPID_KEY;
+    if (!vapid || vapid.startsWith('IDE_ILLESZD')) {
+      return { ok: false, reason: 'VAPID kulcs hiányzik.' };
+    }
+    try {
+      const reg = await getUnifiedSwRegistration();
+      const token = await messaging.getToken({ vapidKey: vapid, serviceWorkerRegistration: reg });
+      if (token) {
+        await saveTokenForRole(role, guestId, token);
+        return { ok: true, token };
+      }
+      return { ok: false, reason: 'Üres push token.' };
+    } catch (err) {
+      console.warn('Automatikus FCM token szinkron hiba:', err);
+      return { ok: false, reason: String(err && err.message ? err.message : err) };
+    }
   }
 
   async function requestPushPermission(role, guestId) {
     if (typeof Notification === 'undefined') {
-      return { ok: false, reason: 'A böngésző nem támogatja a push értesítéseket.' };
+      const isIosDevice = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      return {
+        ok: false,
+        reason: isIosDevice
+          ? 'iPhone-on előbb add hozzá az appot a Főképernyőhöz (Megosztás -> Főképernyőhöz adás), és onnan nyisd meg!'
+          : 'Ez a böngésző nem támogatja a háttér push értesítéseket.'
+      };
     }
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') {
-      return { ok: false, reason: 'Az értesítési engedély elutasítva.' };
+      return { ok: false, reason: 'Az értesítési engedély tiltva van a telefonod böngészőjében.' };
     }
     if (demoMode || !messaging) {
       return { ok: true, demo: true, token: 'demo_token' };
     }
-    const vapid = global.APP_CONFIG.VAPID_KEY;
-    if (!vapid || vapid.startsWith('IDE_ILLESZD')) {
-      return { ok: false, reason: 'A VAPID kulcs még nincs beállítva a js/config.js fájlban.' };
-    }
-    try {
-      const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-      const token = await messaging.getToken({ vapidKey: vapid, serviceWorkerRegistration: reg });
-      if (token) {
-        if (role === 'admin') {
-          await saveAdminFcmToken(token);
-        } else if (guestId) {
-          await updateGuest(guestId, { fcmToken: token });
-        }
-      }
-      return { ok: true, token };
-    } catch (err) {
-      console.warn('FCM token hiba:', err);
-      return { ok: false, reason: 'Nem sikerült a push token lekérése.' };
-    }
+    return syncPushTokenIfGranted(role, guestId);
   }
 
   function onForegroundPush(cb) {
@@ -729,7 +778,11 @@
       saveDemoDB(state);
       return;
     }
-    await db.collection('settings').doc('admin').set({ fcmToken }, { merge: true });
+    await db.collection('settings').doc('admin').set({
+      fcmToken,
+      fcmTokens: firebase.firestore.FieldValue.arrayUnion(fcmToken),
+      fcmUpdatedAt: new Date().toISOString()
+    }, { merge: true });
   }
 
   global.SalonService = {
@@ -738,6 +791,7 @@
     isAppsScriptConfigured,
     hashPin,
     requestPushPermission,
+    syncPushTokenIfGranted,
     onForegroundPush,
     triggerCalendarSync,
     sendPushNotification,

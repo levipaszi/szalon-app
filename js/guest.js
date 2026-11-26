@@ -1174,9 +1174,18 @@
       renderAppointmentsTab();
     });
 
-    // Push banner ellenőrzés
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      $('#pushBanner').classList.remove('hidden');
+    // Push értesítés automatikus token-szinkron (ha már engedélyezve van) vagy felajánló
+    if (typeof Notification !== 'undefined') {
+      if (Notification.permission === 'granted') {
+        $('#pushBanner').classList.add('hidden');
+        window.SalonService.syncPushTokenIfGranted('guest', state.guestId);
+      } else if (Notification.permission === 'default') {
+        $('#pushBanner').classList.remove('hidden');
+      }
+    } else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      const pb = $('#pushBanner');
+      pb.innerHTML = '<span><strong>📲 iPhone tipp:</strong> A háttér értesítésekhez előbb add hozzá az appot a Főképernyőhöz (Megosztás ⬆️ → Főképernyőhöz adás ＋), és onnan nyisd meg!</span>';
+      pb.classList.remove('hidden');
     }
 
     // Háttérben frissítsük a naptárat, ha az Apps Script be van állítva
