@@ -174,6 +174,25 @@
         </div>
       </div>
 
+      <!-- Elérhetőség & Messenger beállítás (Vendégeknek az Időpontkérésnél) -->
+      <div class="card">
+        <div class="card-eyebrow">Időpontkérés &amp; Kapcsolat</div>
+        <h2 class="card-title">Telefonszám &amp; Messenger link</h2>
+        <p class="muted small mt-1">Ha megadod a Facebook/Messenger felhasználónevedet, a vendégeknél megjelenik a közvetlen „Beszélgetés indítása Messengeren” gomb is az app-on belüli chat mellett.</p>
+
+        <div class="form-group mt-2">
+          <label class="form-label" for="adminContactPhoneInput">Telefonszám</label>
+          <input class="input" type="tel" id="adminContactPhoneInput" placeholder="+36 70 215 5375" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="adminMessengerInput">Messenger felhasználónév vagy m.me link</label>
+          <input class="input" type="text" id="adminMessengerInput" placeholder="Pl. forfexfodraszat vagy https://m.me/forfexfodraszat" />
+        </div>
+        <button class="btn btn-primary btn-block" id="saveContactSettingsBtn" type="button">
+          💾 Elérhetőségek mentése
+        </button>
+      </div>
+
       <!-- Beépített QR-kód generátor -->
       <div class="card card-accent">
         <div class="card-eyebrow">Szalon QR-kód Generátor</div>
@@ -290,6 +309,28 @@
         <button class="pin-key" type="button" data-key="ok" style="background:var(--accent);color:var(--accent-text);">OK</button>
       </div>
       <p class="small mt-2" id="pinError" style="color:#EF4444;min-height:1.2em;"></p>
+    </div>
+  </div>
+
+  <!-- Admin Chat válasz modál -->
+  <div id="adminChatModal" class="modal-backdrop hidden">
+    <div class="modal-sheet">
+      <div class="row-between">
+        <h2 id="adminChatTitle">Üzenetváltás</h2>
+        <button class="icon-btn" id="closeAdminChatModal" type="button">✕</button>
+      </div>
+      <div class="chip-row mt-2" id="adminChatQuickChips">
+        <button class="chip" type="button" data-admin-quick="Szia! Nézem a naptárat és mindjárt írok szabad időpontokat!">📅 Nézem a naptárat</button>
+        <button class="chip" type="button" data-admin-quick="Beírtalak a naptárba, hamarosan látod is az appod főoldalán!">✅ Beírtalak!</button>
+      </div>
+      <div class="chat-thread" id="adminChatThread"></div>
+      <div class="chat-input-row">
+        <input class="input" id="adminChatInput" type="text" maxlength="500" placeholder="Válasz írása a vendégnek..." />
+        <button class="btn btn-primary" id="adminChatSendBtn" type="button">Küldés</button>
+      </div>
+      <button class="btn btn-ghost btn-sm btn-block mt-2" id="adminChatClearBtn" type="button">
+        🗑 Beszélgetés előzményeinek törlése
+      </button>
     </div>
   </div>
 

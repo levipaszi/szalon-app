@@ -19,7 +19,13 @@
     flashSlots: [],
     pricing: JSON.parse(JSON.stringify(window.APP_CONFIG.DEFAULT_PRICING)),
     pricingEditTab: 'current',
-    reminderTarget: null
+    reminderTarget: null,
+    activeChatGuestId: null,
+    contact: {
+      phoneRaw: window.APP_CONFIG.SOS_PHONE_RAW,
+      phoneDisplay: window.APP_CONFIG.SOS_PHONE_DISPLAY,
+      messengerHandle: ''
+    }
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -439,6 +445,7 @@
                 <div class="row-gap mt-1">
                   <input class="input" style="flex:1;" type="text" id="pairInput_${g.id}" value="${esc(g.name)}" placeholder="Google Naptár kulcsszó" />
                   <button class="btn btn-primary btn-sm" type="button" data-pair-guest="${g.id}">Párosítás</button>
+                  <button class="btn btn-secondary btn-sm" type="button" data-open-chat="${g.id}" title="Üzenetváltás">💬${Number(g.unreadForAdmin) > 0 ? ' ' + g.unreadForAdmin : ''}</button>
                   <button class="btn btn-ghost btn-sm" type="button" data-delete-guest="${g.id}" data-delete-name="${esc(g.name)}" title="Vendég törlése">🗑</button>
                 </div>
               </div>`
@@ -465,6 +472,7 @@
                       <span class="row-gap">
                         <span class="badge ${g.gender === 'male' ? 'badge-male' : 'badge-female'}">${g.gender === 'male' ? 'Férfi' : 'Női'}</span>
                         <span>${esc(g.name)}</span>
+                        ${Number(g.unreadForAdmin) > 0 ? `<span class="badge badge-danger">💬 ${g.unreadForAdmin} új</span>` : ''}
                       </span>
                       <span class="disclosure-chevron">▾</span>
                     </button>
@@ -497,7 +505,8 @@
                       </div>
                       <div class="row-gap">
                         <button class="btn btn-primary" style="flex:1;" type="button" data-save-guest="${g.id}">Mentés</button>
-                        <button class="btn btn-danger" type="button" data-delete-guest="${g.id}" data-delete-name="${esc(g.name)}">🗑 Törlés</button>
+                        <button class="btn btn-secondary" type="button" data-open-chat="${g.id}">💬 Üzenet${Number(g.unreadForAdmin) > 0 ? ` (${g.unreadForAdmin})` : ''}</button>
+                        <button class="btn btn-danger" type="button" data-delete-guest="${g.id}" data-delete-name="${esc(g.name)}">🗑</button>
                       </div>
                     </div>
                   </div>`
@@ -546,6 +555,53 @@
         showToast(`Vendég törölve: ${gname}`);
       });
     });
+
+    $$('[data-open-chat]').forEach((btn) => {
+      btn.addEventListener('click', () => openAdminChat(btn.dataset.openChat));
+    });
+  }
+
+  function openAdminChat(guestId) {
+    const g = state.guests.find((x) => x.id === guestId);
+    if (!g) return;
+    state.activeChatGuestId = guestId;
+    $('#adminChatTitle').textContent = `💬 ${g.name}`;
+    $('#adminChatModal').classList.remove('hidden');
+    renderAdminChatThread();
+    if (Number(g.unreadForAdmin) > 0) {
+      window.SalonService.markChatRead(guestId, 'admin');
+    }
+  }
+
+  function renderAdminChatThread() {
+    if (!state.activeChatGuestId) return;
+    const g = state.guests.find((x) => x.id === state.activeChatGuestId);
+    const thread = $('#adminChatThread');
+    if (!thread) return;
+    if (!g) {
+      $('#adminChatModal').classList.add('hidden');
+      state.activeChatGuestId = null;
+      return;
+    }
+    const msgs = Array.isArray(g.chatMessages) ? g.chatMessages : [];
+    if (!msgs.length) {
+      thread.innerHTML = '<div class="chat-empty">Még nincs üzenetváltás ezzel a vendéggel.</div>';
+    } else {
+      thread.innerHTML = msgs
+        .map((m) => {
+          const mine = m.sender === 'admin';
+          const t = m.createdAt
+            ? new Date(m.createdAt).toLocaleString('hu-HU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : '';
+          return `
+            <div class="chat-bubble ${mine ? 'chat-bubble-mine' : 'chat-bubble-theirs'}">
+              <div>${esc(m.text)}</div>
+              <div class="chat-time">${esc(t)}</div>
+            </div>`;
+        })
+        .join('');
+      thread.scrollTop = thread.scrollHeight;
+    }
   }
 
   // ---------------- 4. ÁRLISTA & QR GENERÁTOR ----------------
@@ -764,6 +820,57 @@
       }
     });
 
+    // Admin Chat modál események
+    $('#closeAdminChatModal').addEventListener('click', () => {
+      $('#adminChatModal').classList.add('hidden');
+      state.activeChatGuestId = null;
+    });
+    $('#adminChatModal').addEventListener('click', (e) => {
+      if (e.target.id === 'adminChatModal') {
+        $('#adminChatModal').classList.add('hidden');
+        state.activeChatGuestId = null;
+      }
+    });
+    const sendAdminMsg = async () => {
+      const inp = $('#adminChatInput');
+      const text = (inp.value || '').trim();
+      if (!text || !state.activeChatGuestId) return;
+      inp.value = '';
+      await window.SalonService.sendChatMessage(state.activeChatGuestId, 'admin', text);
+      showToast('Válasz elküldve!');
+    };
+    $('#adminChatSendBtn').addEventListener('click', sendAdminMsg);
+    $('#adminChatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendAdminMsg();
+      }
+    });
+    $$('#adminChatQuickChips [data-admin-quick]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        $('#adminChatInput').value = chip.dataset.adminQuick;
+        $('#adminChatInput').focus();
+      });
+    });
+    $('#adminChatClearBtn').addEventListener('click', async () => {
+      if (!state.activeChatGuestId) return;
+      if (!window.confirm('Biztosan törlöd a beszélgetés előzményeit ennél a vendégnél?')) return;
+      await window.SalonService.clearGuestChat(state.activeChatGuestId);
+      showToast('Beszélgetés törölve.');
+    });
+
+    // Elérhetőségek & Messenger mentése
+    $('#saveContactSettingsBtn').addEventListener('click', async () => {
+      const phoneDisp = ($('#adminContactPhoneInput').value || '').trim();
+      const messenger = ($('#adminMessengerInput').value || '').trim();
+      await window.SalonService.saveContactSettings({
+        phoneRaw: phoneDisp.replace(/[^+\d]/g, '') || window.APP_CONFIG.SOS_PHONE_RAW,
+        phoneDisplay: phoneDisp || window.APP_CONFIG.SOS_PHONE_DISPLAY,
+        messengerHandle: messenger
+      });
+      showToast('Telefonszám és Messenger link elmentve!');
+    });
+
     // Extra emlékeztető modál
     $('#closeReminderModal').addEventListener('click', () => $('#reminderModal').classList.add('hidden'));
     $('#reminderModal').addEventListener('click', (e) => {
@@ -941,7 +1048,20 @@
       });
     }
 
-    // 4. Párosításra váró új vendégek
+    // 4. Olvasatlan vendég üzenetek (Időpontkérés / Chat)
+    const unreadGuests = state.guests.filter((g) => Number(g.unreadForAdmin) > 0);
+    unreadGuests.forEach((g) => {
+      alerts.push({
+        type: 'accent',
+        icon: '💬',
+        title: `ÚJ ÜZENET: ${g.name} (${g.unreadForAdmin})`,
+        subtitle: g.lastMessagePreview || 'Koppints a válaszhoz!',
+        cta: 'Válasz',
+        onClick: () => openAdminChat(g.id)
+      });
+    });
+
+    // 5. Párosításra váró új vendégek
     const pendingGuests = state.guests.filter((g) => !g.paired);
     if (pendingGuests.length > 0) {
       alerts.push({
@@ -954,10 +1074,11 @@
       });
     }
 
+    const totalUnreadMsgs = unreadGuests.reduce((acc, g) => acc + (Number(g.unreadForAdmin) || 0), 0);
     window.PwaUX.renderUrgentStack('adminUrgentStack', alerts);
     window.PwaUX.setNavBadge('adminCalNavBadge', lateToday.length, lateToday.length > 0);
     window.PwaUX.setNavBadge('adminSosNavBadge', pendingSos.length + flashApplicantsCount, pendingSos.length > 0 || flashApplicantsCount > 0);
-    window.PwaUX.setNavBadge('adminGuestNavBadge', pendingGuests.length, false);
+    window.PwaUX.setNavBadge('adminGuestNavBadge', pendingGuests.length + totalUnreadMsgs, totalUnreadMsgs > 0);
   }
 
   function updateAdminPushStatusUI(text) {
@@ -972,6 +1093,7 @@
 
     let guestsLoaded = false;
     let prevPendingGuestIds = new Set();
+    let prevUnreadMap = {};
     window.SalonService.subscribeAllGuests((guests) => {
       const pendingNow = guests.filter((g) => !g.paired);
       if (guestsLoaded && window.PwaUX) {
@@ -981,12 +1103,42 @@
           window.PwaUX.vibrate('normal');
           showToast(`👤 Új vendég regisztrált: ${newest.name}`);
         }
+        guests.forEach((g) => {
+          const curU = Number(g.unreadForAdmin) || 0;
+          const oldU = prevUnreadMap[g.id] || 0;
+          if (curU > oldU && state.activeChatGuestId !== g.id) {
+            window.PwaUX.showAttentionAlert({
+              title: `💬 Új üzenet: ${g.name}`,
+              body: g.lastMessagePreview || 'Új üzenetet küldött az alkalmazásban.',
+              level: 'urgent',
+              actionLabel: 'Válasz most',
+              onAction: () => openAdminChat(g.id)
+            });
+          }
+        });
       }
       prevPendingGuestIds = new Set(pendingNow.map((g) => g.id));
+      prevUnreadMap = {};
+      guests.forEach((g) => { prevUnreadMap[g.id] = Number(g.unreadForAdmin) || 0; });
       guestsLoaded = true;
       state.guests = guests;
       renderGuests();
       renderCalendar();
+      if (state.activeChatGuestId) {
+        renderAdminChatThread();
+        const openG = guests.find((x) => x.id === state.activeChatGuestId);
+        if (openG && Number(openG.unreadForAdmin) > 0) {
+          window.SalonService.markChatRead(state.activeChatGuestId, 'admin');
+        }
+      }
+    });
+
+    window.SalonService.subscribeContactSettings((contact) => {
+      state.contact = contact;
+      const pInp = $('#adminContactPhoneInput');
+      const mInp = $('#adminMessengerInput');
+      if (pInp && document.activeElement !== pInp) pInp.value = contact.phoneDisplay || '';
+      if (mInp && document.activeElement !== mInp) mInp.value = contact.messengerHandle || '';
     });
 
     let apptsLoaded = false;

@@ -188,16 +188,55 @@
     <!-- ==================== 3. IDŐPONTOK FÜL ==================== -->
     <section id="tab-appointments" class="tab-section" aria-label="Időpontok">
       <div class="section-heading">
-        <h1>VIP Villám-időpontok</h1>
-        <p>Ha felszabadul egy váratlan hely, értesítünk és egy érintéssel jelentkezhetsz rá.</p>
+        <h1>Időpontkérés &amp; Villám</h1>
+        <p>Kérj új időpontot egyszerűen, vagy iratkozz fel a felszabaduló VIP villám-helyekre.</p>
+      </div>
+
+      <!-- Időpontot szeretnék / Kapcsolat (Mind 3 opció: Belső chat + Messenger + Hívás) -->
+      <div class="card card-accent" id="bookingContactCard">
+        <div class="row-between">
+          <span class="card-eyebrow">📅 Időpontot szeretnék</span>
+          <span class="badge badge-danger hidden" id="guestChatUnreadBadge">Új válasz!</span>
+        </div>
+        <h2 class="card-title">Egyeztessünk új időpontot</h2>
+        <p class="muted small mt-1">Válaszd a neked legkényelmesebb módot – írhatsz közvetlenül itt az appban, Messengeren vagy hívhatsz telefonon is.</p>
+
+        <div class="contact-actions-grid">
+          <button class="btn btn-primary btn-block" id="toggleGuestChatBtn" type="button">
+            💬 Üzenet küldése az appban
+          </button>
+          <a class="btn btn-messenger btn-block hidden" id="guestMessengerLink" href="#" target="_blank" rel="noopener">
+            💬 Beszélgetés indítása Messengeren
+          </a>
+          <a class="btn btn-secondary btn-block" id="guestPhoneLink" href="tel:+36702155375">
+            📞 Hívás: +36 70 215 5375
+          </a>
+        </div>
+
+        <!-- Lenyíló valós idejű alkalmazáson belüli chat -->
+        <div id="guestChatPanel" class="hidden mt-2">
+          <div class="chip-row" id="guestChatQuickChips">
+            <button class="chip" type="button" data-quick-msg="Szia! Időpontot szeretnék kérni.">📅 Időpontot kérek</button>
+            <button class="chip" type="button" data-quick-msg="Szia! Mikor van legközelebb szabad helyed?">🕒 Szabad hely?</button>
+            <button class="chip" type="button" data-quick-msg="Szia! Hajvágás + festésre szeretnék időpontot.">🎨 Vágás + festés</button>
+          </div>
+          <div class="chat-thread" id="guestChatThread">
+            <div class="chat-empty">Írj nyugodtan egy üzenetet – a fodrászod azonnal értesítést kap róla!</div>
+          </div>
+          <div class="chat-input-row">
+            <input class="input" id="guestChatInput" type="text" maxlength="500" placeholder="Írj üzenetet a fodrászodnak..." />
+            <button class="btn btn-primary" id="guestChatSendBtn" type="button">Küldés</button>
+          </div>
+        </div>
       </div>
 
       <!-- VIP Villám feliratkozás kártya -->
       <div class="card">
+        <div class="card-eyebrow">⚡ VIP Villám-időpontok</div>
         <div class="switch-row">
           <div>
             <strong>Villám-időpont riasztások</strong>
-            <p class="muted small">Értesíts, ha felszabadul egy alkalom.</p>
+            <p class="muted small">Értesíts, ha váratlanul felszabadul egy alkalom.</p>
           </div>
           <label class="switch">
             <input type="checkbox" id="flashSubToggle" />

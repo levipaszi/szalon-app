@@ -781,6 +781,117 @@
     await db.collection('flashSlots').doc(slotId).delete();
   }
 
+  // ---------------- KAPCSOLAT (TELEFON & MESSENGER) ÉS BELSŐ CHAT ----------------
+  function defaultContactSettings() {
+    return {
+      phoneRaw: (global.APP_CONFIG && global.APP_CONFIG.SOS_PHONE_RAW) || '+36702155375',
+      phoneDisplay: (global.APP_CONFIG && global.APP_CONFIG.SOS_PHONE_DISPLAY) || '+36 70 215 5375',
+      messengerHandle: ''
+    };
+  }
+
+  function subscribeContactSettings(cb) {
+    const def = defaultContactSettings();
+    if (demoMode) {
+      return subscribeDemo((state) => cb(Object.assign({}, def, state.contact || {})));
+    }
+    return db.collection('settings').doc('contact').onSnapshot((snap) => {
+      cb(snap.exists ? Object.assign({}, def, snap.data()) : def);
+    });
+  }
+
+  async function saveContactSettings(contact) {
+    const clean = {
+      phoneRaw: String(contact.phoneRaw || '').replace(/[^+\d]/g, '') || '+36702155375',
+      phoneDisplay: String(contact.phoneDisplay || contact.phoneRaw || '+36 70 215 5375').trim(),
+      messengerHandle: String(contact.messengerHandle || '').trim()
+    };
+    if (demoMode) {
+      const state = loadDemoDB();
+      state.contact = clean;
+      saveDemoDB(state);
+      return;
+    }
+    await db.collection('settings').doc('contact').set(clean, { merge: true });
+  }
+
+  async function sendChatMessage(guestId, senderRole, text, guestName) {
+    const trimmed = String(text || '').trim().slice(0, 600);
+    if (!trimmed || !guestId) return null;
+
+    const msg = {
+      id: genId('msg'),
+      sender: senderRole, // 'guest' | 'admin'
+      text: trimmed,
+      createdAt: new Date().toISOString()
+    };
+
+    if (demoMode) {
+      const state = loadDemoDB();
+      const g = state.guests[guestId];
+      if (!g) return null;
+      const list = Array.isArray(g.chatMessages) ? g.chatMessages.slice(-49) : [];
+      list.push(msg);
+      g.chatMessages = list;
+      g.lastMessageAt = msg.createdAt;
+      g.lastMessagePreview = trimmed.slice(0, 90);
+      if (senderRole === 'guest') g.unreadForAdmin = (Number(g.unreadForAdmin) || 0) + 1;
+      else g.unreadForGuest = (Number(g.unreadForGuest) || 0) + 1;
+      saveDemoDB(state);
+    } else {
+      const ref = db.collection('guests').doc(guestId);
+      const snap = await ref.get();
+      const data = snap.exists ? snap.data() : {};
+      const list = Array.isArray(data.chatMessages) ? data.chatMessages.slice(-49) : [];
+      list.push(msg);
+      const patch = {
+        chatMessages: list,
+        lastMessageAt: msg.createdAt,
+        lastMessagePreview: trimmed.slice(0, 90)
+      };
+      if (senderRole === 'guest') {
+        patch.unreadForAdmin = (Number(data.unreadForAdmin) || 0) + 1;
+      } else {
+        patch.unreadForGuest = (Number(data.unreadForGuest) || 0) + 1;
+      }
+      await ref.set(patch, { merge: true });
+    }
+
+    if (senderRole === 'guest') {
+      sendPushNotification({
+        targetRole: 'admin',
+        title: `💬 Új üzenet: ${guestName || 'Vendég'}`,
+        body: trimmed.slice(0, 120),
+        url: './admin.html'
+      });
+    } else {
+      sendPushNotification({
+        targetRole: 'guest',
+        guestId,
+        title: `💬 Válasz érkezett (${global.APP_CONFIG.SALON_NAME})`,
+        body: trimmed.slice(0, 120),
+        url: './index.html#appointments'
+      });
+    }
+    return msg;
+  }
+
+  async function markChatRead(guestId, readerRole) {
+    if (!guestId) return;
+    const patch = readerRole === 'admin' ? { unreadForAdmin: 0 } : { unreadForGuest: 0 };
+    await updateGuest(guestId, patch);
+  }
+
+  async function clearGuestChat(guestId) {
+    if (!guestId) return;
+    await updateGuest(guestId, {
+      chatMessages: [],
+      unreadForAdmin: 0,
+      unreadForGuest: 0,
+      lastMessagePreview: ''
+    });
+  }
+
   // ---------------- ADMIN BEÁLLÍTÁSOK & PIN ----------------
   async function getAdminConfig() {
     if (demoMode) {
@@ -835,6 +946,11 @@
     updateAppointmentMeta,
     subscribePricing,
     savePricing,
+    subscribeContactSettings,
+    saveContactSettings,
+    sendChatMessage,
+    markChatRead,
+    clearGuestChat,
     createSosRequest,
     subscribeGuestSos,
     subscribeAllSos,

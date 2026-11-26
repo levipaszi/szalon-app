@@ -14,6 +14,12 @@
     appointments: [],
     pricing: window.APP_CONFIG.DEFAULT_PRICING,
     pricingTab: 'current',
+    contact: {
+      phoneRaw: window.APP_CONFIG.SOS_PHONE_RAW,
+      phoneDisplay: window.APP_CONFIG.SOS_PHONE_DISPLAY,
+      messengerHandle: ''
+    },
+    chatOpen: false,
     flashSlots: [],
     sosRequests: [],
     sosQuick: '',
@@ -191,8 +197,23 @@
     if (!nextAppt) {
       const pairingHint = !state.guest.paired
         ? 'A profilod párosításra vár – amint a fodrászod összeköti a neveddel a Google Naptárt, minden időpontod élőben megjelenik itt.'
-        : 'Jelenleg nincs jövőbeli időpontod a naptárban. Ha sürgős, nézd meg a Villám-időpontokat!';
-      nextContent.innerHTML = `<p class="muted mt-1">${esc(pairingHint)}</p>`;
+        : 'Jelenleg nincs lefoglalt időpontod a naptárban.';
+      nextContent.innerHTML = `
+        <p class="muted mt-1">${esc(pairingHint)}</p>
+        <div class="no-appt-cta">
+          <strong style="font-size:0.95rem;">Szeretnél új időpontot foglalni?</strong>
+          <button class="btn btn-primary btn-block" id="homeRequestApptBtn" type="button">
+            📅 Időpontot szeretnék kérni
+          </button>
+        </div>
+      `;
+      const reqBtn = $('#homeRequestApptBtn');
+      if (reqBtn) {
+        reqBtn.addEventListener('click', () => {
+          switchTab('appointments');
+          openGuestChat(true);
+        });
+      }
       lateWrap.classList.add('hidden');
       checkinCard.classList.add('hidden');
     } else {
@@ -720,18 +741,123 @@
 
     const openFlashCount = state.flashSlots.filter((s) => s.status === 'open').length;
     const sosApprovedCount = latestSos && latestSos.status === 'approved' ? 1 : 0;
-    const totalUrgent = openFlashCount + sosApprovedCount;
+    const unreadChat = Number(state.guest && state.guest.unreadForGuest) || 0;
+    const totalUrgent = openFlashCount + sosApprovedCount + unreadChat;
     if (window.PwaUX) {
       window.PwaUX.setNavBadge('apptNavBadge', totalUrgent, totalUrgent > 0);
     }
+    renderGuestContactAndChat();
     renderGuestUrgentAlerts();
     populateSosServices();
+  }
+
+  function buildMessengerUrl(raw) {
+    const val = String(raw || '').trim();
+    if (!val) return '';
+    if (/^https?:\/\/(m\.me|messenger\.com)\//i.test(val)) return val;
+    const fbMatch = val.match(/facebook\.com\/([^/?#]+)/i);
+    if (fbMatch && fbMatch[1] && fbMatch[1] !== 'profile.php') {
+      return `https://m.me/${fbMatch[1]}`;
+    }
+    if (/^https?:\/\//i.test(val)) return val;
+    return `https://m.me/${val.replace(/^@/, '')}`;
+  }
+
+  function openGuestChat(forceOpen) {
+    state.chatOpen = forceOpen ? true : !state.chatOpen;
+    const panel = $('#guestChatPanel');
+    if (panel) panel.classList.toggle('hidden', !state.chatOpen);
+    renderGuestContactAndChat();
+    if (state.chatOpen && state.guest && Number(state.guest.unreadForGuest) > 0) {
+      window.SalonService.markChatRead(state.guestId, 'guest');
+    }
+    if (state.chatOpen) {
+      const thread = $('#guestChatThread');
+      if (thread) thread.scrollTop = thread.scrollHeight;
+    }
+  }
+
+  function renderGuestContactAndChat() {
+    const c = state.contact || {};
+    const phoneRaw = c.phoneRaw || window.APP_CONFIG.SOS_PHONE_RAW;
+    const phoneDisp = c.phoneDisplay || window.APP_CONFIG.SOS_PHONE_DISPLAY;
+    const phoneLink = $('#guestPhoneLink');
+    if (phoneLink) {
+      phoneLink.href = `tel:${phoneRaw}`;
+      phoneLink.textContent = `📞 Hívás: ${phoneDisp}`;
+    }
+
+    const msgUrl = buildMessengerUrl(c.messengerHandle);
+    const msgLink = $('#guestMessengerLink');
+    if (msgLink) {
+      if (msgUrl) {
+        msgLink.href = msgUrl;
+        msgLink.classList.remove('hidden');
+      } else {
+        msgLink.classList.add('hidden');
+      }
+    }
+
+    const unread = Number(state.guest && state.guest.unreadForGuest) || 0;
+    const badge = $('#guestChatUnreadBadge');
+    if (badge) {
+      badge.classList.toggle('hidden', unread <= 0);
+      badge.textContent = unread === 1 ? '1 új válasz!' : `${unread} új válasz!`;
+    }
+
+    const toggleBtn = $('#toggleGuestChatBtn');
+    if (toggleBtn) {
+      toggleBtn.textContent = state.chatOpen
+        ? '💬 Üzenetablak bezárása'
+        : unread > 0
+          ? `💬 Üzenetek megnyitása (${unread} új)`
+          : '💬 Üzenet küldése az appban';
+    }
+
+    const panel = $('#guestChatPanel');
+    if (panel) panel.classList.toggle('hidden', !state.chatOpen);
+
+    const thread = $('#guestChatThread');
+    if (!thread || !state.guest) return;
+    const msgs = Array.isArray(state.guest.chatMessages) ? state.guest.chatMessages : [];
+    if (!msgs.length) {
+      thread.innerHTML = '<div class="chat-empty">Írj nyugodtan egy üzenetet (pl. milyen nap és napszak jó neked) – a fodrászod azonnal értesítést kap róla!</div>';
+    } else {
+      thread.innerHTML = msgs
+        .map((m) => {
+          const mine = m.sender === 'guest';
+          const t = m.createdAt
+            ? new Date(m.createdAt).toLocaleString('hu-HU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : '';
+          return `
+            <div class="chat-bubble ${mine ? 'chat-bubble-mine' : 'chat-bubble-theirs'}">
+              <div>${esc(m.text)}</div>
+              <div class="chat-time">${esc(t)}</div>
+            </div>`;
+        })
+        .join('');
+      thread.scrollTop = thread.scrollHeight;
+    }
   }
 
   function renderGuestUrgentAlerts() {
     if (!window.PwaUX || !state.guest) return;
     const alerts = [];
     const latestSos = state.sosRequests[0];
+
+    if (Number(state.guest.unreadForGuest) > 0) {
+      alerts.push({
+        type: 'accent',
+        icon: '💬',
+        title: `ÚJ VÁLASZ A FODRÁSZODTÓL! (${state.guest.unreadForGuest})`,
+        subtitle: state.guest.lastMessagePreview || 'Koppints a megnyitáshoz!',
+        cta: 'Megnyitás',
+        onClick: () => {
+          switchTab('appointments');
+          openGuestChat(true);
+        }
+      });
+    }
 
     if (latestSos && latestSos.status === 'approved') {
       alerts.push({
@@ -973,6 +1099,41 @@
       $('#photoDisclosure').classList.remove('open');
     });
 
+    // Alkalmazáson belüli chat események
+    const toggleChatBtn = $('#toggleGuestChatBtn');
+    if (toggleChatBtn) {
+      toggleChatBtn.addEventListener('click', () => openGuestChat(false));
+    }
+
+    const sendGuestMsg = async () => {
+      const inp = $('#guestChatInput');
+      const text = (inp.value || '').trim();
+      if (!text || !state.guest) return;
+      inp.value = '';
+      await window.SalonService.sendChatMessage(state.guestId, 'guest', text, state.guest.name);
+      showToast('Üzenet elküldve a fodrászodnak!');
+    };
+    const sendBtn = $('#guestChatSendBtn');
+    if (sendBtn) sendBtn.addEventListener('click', sendGuestMsg);
+    const chatInp = $('#guestChatInput');
+    if (chatInp) {
+      chatInp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          sendGuestMsg();
+        }
+      });
+    }
+    $$('#guestChatQuickChips [data-quick-msg]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const inp = $('#guestChatInput');
+        if (inp) {
+          inp.value = chip.dataset.quickMsg;
+          inp.focus();
+        }
+      });
+    });
+
     // VIP Villám beállítások
     $('#flashSubToggle').addEventListener('change', async (e) => {
       await window.SalonService.updateGuest(state.guestId, { flashSubscribed: e.target.checked });
@@ -1100,17 +1261,42 @@
   }
 
   function startSubscriptions() {
+    let guestLoaded = false;
+    let prevUnreadForGuest = 0;
     window.SalonService.subscribeGuest(state.guestId, (guest) => {
       if (!guest) {
         localStorage.removeItem(GUEST_ID_KEY);
         setupOnboarding();
         return;
       }
+      const newUnread = Number(guest.unreadForGuest) || 0;
+      if (guestLoaded && newUnread > prevUnreadForGuest && !state.chatOpen && window.PwaUX) {
+        window.PwaUX.showAttentionAlert({
+          title: '💬 Új válasz érkezett!',
+          body: guest.lastMessagePreview || 'A fodrászod válaszolt az üzenetedre.',
+          level: 'normal',
+          actionLabel: 'Üzenet megnyitása',
+          onAction: () => {
+            switchTab('appointments');
+            openGuestChat(true);
+          }
+        });
+      }
+      prevUnreadForGuest = newUnread;
+      guestLoaded = true;
       state.guest = guest;
       applyTheme(guest.theme || localStorage.getItem(GUEST_THEME_KEY) || 'male');
       renderHome();
       renderHaircare();
       renderAppointmentsTab();
+      if (state.chatOpen && newUnread > 0) {
+        window.SalonService.markChatRead(state.guestId, 'guest');
+      }
+    });
+
+    window.SalonService.subscribeContactSettings((contact) => {
+      state.contact = contact;
+      renderGuestContactAndChat();
     });
 
     window.SalonService.subscribeGuestAppointments(state.guestId, (appts) => {
