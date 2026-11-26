@@ -1278,17 +1278,22 @@
         return;
       }
       const newUnread = Number(guest.unreadForGuest) || 0;
-      if (guestLoaded && newUnread > prevUnreadForGuest && !state.chatOpen && window.PwaUX) {
-        window.PwaUX.showAttentionAlert({
-          title: '💬 Új válasz érkezett!',
-          body: guest.lastMessagePreview || 'A fodrászod válaszolt az üzenetedre.',
-          level: 'normal',
-          actionLabel: 'Üzenet megnyitása',
-          onAction: () => {
-            switchTab('appointments');
-            openGuestChat(true);
-          }
-        });
+      if (guestLoaded && newUnread > prevUnreadForGuest && window.PwaUX) {
+        if (!state.chatOpen) {
+          window.PwaUX.showAttentionAlert({
+            title: '💬 Új üzenet a fodrászodtól!',
+            body: guest.lastMessagePreview || 'A fodrászod üzenetet küldött neked az alkalmazásban.',
+            level: 'urgent',
+            actionLabel: 'Üzenet megnyitása',
+            onAction: () => {
+              switchTab('appointments');
+              openGuestChat(true);
+            }
+          });
+        } else {
+          window.PwaUX.playTone('urgent');
+          window.PwaUX.vibrate('urgent');
+        }
       }
       prevUnreadForGuest = newUnread;
       guestLoaded = true;
@@ -1419,13 +1424,16 @@
 
     window.SalonService.onForegroundPush(({ title, body }) => {
       if (window.PwaUX) {
-        const isUrgent = /sos|villám|változott|1 óra/i.test(`${title} ${body}`);
+        const isUrgent = /sos|villám|változott|1 óra|válasz|üzenet/i.test(`${title} ${body}`);
         window.PwaUX.showAttentionAlert({
           title,
           body,
           level: isUrgent ? 'urgent' : 'normal',
-          actionLabel: /sos|villám/i.test(`${title} ${body}`) ? 'Időpontok megnyitása' : '',
-          onAction: () => switchTab('appointments')
+          actionLabel: /sos|villám|válasz|üzenet/i.test(`${title} ${body}`) ? 'Megnyitás most' : '',
+          onAction: () => {
+            switchTab('appointments');
+            if (/válasz|üzenet/i.test(`${title} ${body}`)) openGuestChat(true);
+          }
         });
       } else {
         showToast(`${title}${body ? ' – ' + body : ''}`);

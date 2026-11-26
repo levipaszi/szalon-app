@@ -7,7 +7,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'forfex-vip-v1.7.2';
+const CACHE_NAME = 'forfex-vip-v1.8.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -59,7 +59,7 @@ if (typeof firebase !== 'undefined' && FIREBASE_SW_CONFIG.apiKey) {
         ? './icons/admin-192.png'
         : './icons/guest-192.png';
 
-      const isUrgent = /sos|késés|villám|változott|1 óra|teszt/i.test(`${title} ${body}`);
+      const isUrgent = /sos|késés|villám|változott|1 óra|teszt|válasz|üzenet/i.test(`${title} ${body}`);
       const tag = /sos/i.test(title)
         ? 'atelier-sos'
         : /késés/i.test(title)

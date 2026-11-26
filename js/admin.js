@@ -120,9 +120,9 @@
 
     const supported = await isBiometricsSupported();
     if (!supported) {
-      statusEl.textContent = 'Ez az eszköz / böngésző jelenleg nem támogatja a beépített biometrikus azonosítást.';
-      if (enableBtn) enableBtn.disabled = true;
-      if (disableBtn) disableBtn.classList.add('hidden');
+      statusEl.textContent = 'Ezen az eszközön próbáld meg a gombbal — ha van beállított ujjlenyomat/Face ID, fel fogja ajánlani.';
+      if (enableBtn) enableBtn.disabled = false;
+      if (disableBtn) disableBtn.classList.toggle('hidden', !hasSavedBiometric());
       return;
     }
 
@@ -162,25 +162,47 @@
     if (statusEl) statusEl.textContent = '⏳ Ujjlenyomat / Face ID ablak megnyitása...';
 
     try {
-      const cred = await navigator.credentials.create({
-        publicKey: {
-          challenge,
-          rp: { name: 'Forfex Admin' },
-          user: { id: userId, name: 'forfex-admin', displayName: 'Forfex Admin' },
-          pubKeyCredParams: [
-            { alg: -7, type: 'public-key' },
-            { alg: -257, type: 'public-key' }
-          ],
-          authenticatorSelection: {
-            authenticatorAttachment: 'platform',
-            residentKey: 'preferred',
-            requireResidentKey: false,
-            userVerification: 'required'
-          },
-          attestation: 'none',
-          timeout: 60000
-        }
-      });
+      let cred = null;
+      try {
+        cred = await navigator.credentials.create({
+          publicKey: {
+            challenge,
+            rp: { name: 'Forfex Admin' },
+            user: { id: userId, name: 'forfex-admin', displayName: 'Forfex Admin' },
+            pubKeyCredParams: [
+              { alg: -7, type: 'public-key' },
+              { alg: -257, type: 'public-key' }
+            ],
+            authenticatorSelection: {
+              authenticatorAttachment: 'platform',
+              residentKey: 'preferred',
+              requireResidentKey: false,
+              userVerification: 'required'
+            },
+            attestation: 'none',
+            timeout: 60000
+          }
+        });
+      } catch (firstErr) {
+        // Fallback: ha a platform-kényszerítés elakadna, engedjük a telefon alapértelmezett képernyőzár-azonosítóját
+        if (firstErr && firstErr.name === 'NotAllowedError') throw firstErr;
+        cred = await navigator.credentials.create({
+          publicKey: {
+            challenge,
+            rp: { name: 'Forfex Admin' },
+            user: { id: userId, name: 'forfex-admin', displayName: 'Forfex Admin' },
+            pubKeyCredParams: [
+              { alg: -7, type: 'public-key' },
+              { alg: -257, type: 'public-key' }
+            ],
+            authenticatorSelection: {
+              userVerification: 'preferred'
+            },
+            attestation: 'none',
+            timeout: 60000
+          }
+        });
+      }
 
       if (cred && cred.rawId) {
         localStorage.setItem(BIO_CRED_KEY, bufToB64Url(cred.rawId));
@@ -712,7 +734,58 @@
     });
   }
 
+  function renderSearchQuickResults() {
+    const resEl = $('#adminGuestSearchResults');
+    if (!resEl) return;
+    const qNorm = normSearch(state.guestSearchQuery);
+    if (!qNorm) {
+      resEl.classList.add('hidden');
+      resEl.innerHTML = '';
+      return;
+    }
+    const matches = state.guests
+      .filter((g) => guestMatchesSearch(g, qNorm))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hu'));
+
+    resEl.classList.remove('hidden');
+    if (!matches.length) {
+      resEl.innerHTML = `<div class="card" style="padding:14px;"><p class="small muted">Nincs találat erre: „${esc(state.guestSearchQuery)}”</p></div>`;
+      return;
+    }
+
+    resEl.innerHTML = `
+      <div class="card card-accent" style="padding:14px;">
+        <div class="card-eyebrow">Keresési találatok (${matches.length})</div>
+        ${matches
+          .map((g) => {
+            const unread = Number(g.unreadForAdmin) || 0;
+            const msgCount = Array.isArray(g.chatMessages) ? g.chatMessages.length : 0;
+            return `
+              <div class="appt-list-item mt-1">
+                <div style="min-width:0;flex:1;">
+                  <div class="row-gap">
+                    <strong>${esc(g.name)}</strong>
+                    <span class="badge ${g.gender === 'male' ? 'badge-male' : 'badge-female'}">${g.gender === 'male' ? 'Férfi' : 'Női'}</span>
+                    ${unread > 0 ? `<span class="badge badge-danger">${unread} új</span>` : ''}
+                  </div>
+                  <div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">
+                    ${g.lastMessagePreview ? esc(g.lastMessagePreview) : msgCount ? `${msgCount} üzenet` : 'Nincs még üzenet – koppints a 💬 gombra!'}
+                  </div>
+                </div>
+                <button class="btn btn-sm btn-primary" type="button" data-quick-chat="${g.id}">💬 Üzenet</button>
+              </div>`;
+          })
+          .join('')}
+      </div>
+    `;
+
+    $$('[data-quick-chat]').forEach((btn) => {
+      btn.addEventListener('click', () => openAdminChat(btn.dataset.quickChat));
+    });
+  }
+
   function renderGuests() {
+    renderSearchQuickResults();
     renderMessagesInbox();
     const qNorm = normSearch(state.guestSearchQuery);
     const pending = state.guests.filter((g) => !g.paired && guestMatchesSearch(g, qNorm));

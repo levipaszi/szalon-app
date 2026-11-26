@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/styles.css" />
+  <link rel="stylesheet" href="./css/styles.css?v=18" />
 </head>
 <body>
   <!-- Fejléc -->
@@ -125,11 +125,12 @@
         <p>Beérkező üzenetek, új beszélgetés indítása és vendégek párosítása.</p>
       </div>
 
-      <!-- Élő vendég- és üzenetkereső -->
-      <div class="row-gap" style="margin-bottom:14px;">
-        <input class="input" type="search" id="adminGuestSearchInput" style="flex:1;" placeholder="🔍 Vendég neve vagy üzenet keresése..." autocomplete="off" />
+      <!-- Élő vendég- és üzenetkereső + azonnali találati lista -->
+      <div class="row-gap" style="margin-bottom:10px;">
+        <input class="input" type="search" id="adminGuestSearchInput" style="flex:1;" placeholder="🔍 Írj be egy nevet vagy szót az üzenetekből..." autocomplete="off" />
         <button class="icon-btn hidden" id="adminGuestSearchClear" type="button" aria-label="Keresés törlése">✕</button>
       </div>
+      <div id="adminGuestSearchResults" class="hidden" style="margin-bottom:14px;"></div>
 
       <div id="adminMessagesInbox"></div>
       <div id="adminPendingGuests"></div>
@@ -391,10 +392,10 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
-  <script src="./js/config.js"></script>
-  <script src="./js/firebase-service.js"></script>
-  <script src="./js/pwa-ux.js"></script>
-  <script src="./js/qrcode-gen.js"></script>
-  <script src="./js/admin.js"></script>
+  <script src="./js/config.js?v=18"></script>
+  <script src="./js/firebase-service.js?v=18"></script>
+  <script src="./js/pwa-ux.js?v=18"></script>
+  <script src="./js/qrcode-gen.js?v=18"></script>
+  <script src="./js/admin.js?v=18"></script>
 </body>
 </html>
