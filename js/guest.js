@@ -1324,7 +1324,11 @@
       localStorage.setItem(GUEST_ID_KEY, created.id);
       overlay.classList.add('hidden');
       startSubscriptions();
-      showToast(`Üdvözlünk, ${created.name}!`);
+      showToast(
+        created._reused
+          ? `Üdv újra, ${created.name}! A meglévő profilod és időpontjaid betöltve. ✅`
+          : `Üdvözlünk, ${created.name}!`
+      );
     });
   }
 

@@ -360,11 +360,33 @@
   }
 
   // ---------------- VENDÉGEK ----------------
+  function normalizeGuestName(str) {
+    return String(str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function pickBestExistingGuest(matches) {
+    return matches.slice().sort((a, b) => {
+      if (!!a.paired !== !!b.paired) return a.paired ? -1 : 1;
+      const ma = Array.isArray(a.chatMessages) ? a.chatMessages.length : 0;
+      const mb = Array.isArray(b.chatMessages) ? b.chatMessages.length : 0;
+      if (ma !== mb) return mb - ma;
+      return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+    })[0];
+  }
+
   async function createGuest(guestData) {
+    const cleanName = guestData.name.trim().replace(/\s+/g, ' ');
+    const normName = normalizeGuestName(cleanName);
     const id = guestData.id || genId('guest');
     const doc = {
       id,
-      name: guestData.name.trim(),
+      name: cleanName,
+      nameNormalized: normName,
       gender: guestData.theme === 'male' ? 'male' : 'female',
       theme: guestData.theme || 'male',
       calendarKeyword: '',
@@ -381,17 +403,27 @@
 
     if (demoMode) {
       const state = loadDemoDB();
-      // Ha Demo módban az alap Kovács Anna vagy Szabó Bence névvel lép be, kössük össze a demó naptárral
+      const existingMatches = Object.values(state.guests).filter(
+        (g) => normalizeGuestName(g.name) === normName
+      );
+      if (existingMatches.length) {
+        const chosen = pickBestExistingGuest(existingMatches);
+        chosen.theme = doc.theme;
+        chosen.gender = doc.gender;
+        chosen.nameNormalized = normName;
+        saveDemoDB(state);
+        return Object.assign({}, chosen, { _reused: true });
+      }
       const lower = doc.name.toLowerCase();
       if (lower.includes('anna')) {
         state.guests['demo_guest_anna'].theme = doc.theme;
         saveDemoDB(state);
-        return state.guests['demo_guest_anna'];
+        return Object.assign({}, state.guests['demo_guest_anna'], { _reused: true });
       }
       if (lower.includes('bence')) {
         state.guests['demo_guest_bence'].theme = doc.theme;
         saveDemoDB(state);
-        return state.guests['demo_guest_bence'];
+        return Object.assign({}, state.guests['demo_guest_bence'], { _reused: true });
       }
       // Új demo vendéghez is generáljunk pár jövőbeli demó időpontot, hogy azonnal látványos legyen
       const now = new Date();
@@ -420,6 +452,34 @@
       state.appointments[genId('evt')] = mk(genId('evt'), fut2, doc.serviceDuration, `${doc.name} – Jövő évi időpont`);
       saveDemoDB(state);
       return doc;
+    }
+
+    // iOS duplikáció-védelem: ha már létezik azonos nevű vendég (pl. előbb Safariban lépett be,
+    // majd Főképernyőre telepítés után újra beírta a nevét), a MEGLÉVŐ profiljához kötjük vissza!
+    try {
+      const snap = await db.collection('guests').get();
+      const matches = [];
+      snap.forEach((d) => {
+        const data = Object.assign({ id: d.id }, d.data());
+        if (normalizeGuestName(data.name) === normName || data.nameNormalized === normName) {
+          matches.push(data);
+        }
+      });
+      if (matches.length) {
+        const chosen = pickBestExistingGuest(matches);
+        await db.collection('guests').doc(chosen.id).set({
+          theme: doc.theme,
+          gender: doc.gender,
+          nameNormalized: normName
+        }, { merge: true });
+        return Object.assign({}, chosen, {
+          theme: doc.theme,
+          gender: doc.gender,
+          _reused: true
+        });
+      }
+    } catch (err) {
+      console.warn('Meglévő vendég keresési hiba:', err);
     }
 
     await db.collection('guests').doc(id).set(doc);
