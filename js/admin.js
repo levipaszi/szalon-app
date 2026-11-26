@@ -1057,7 +1057,7 @@
   }
 
   async function bootstrap() {
-    $('#adminSalonTitle').textContent = `${window.APP_CONFIG.SALON_NAME} Admin`;
+    $('#adminSalonTitle').textContent = 'Forfex Admin';
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(() => {});

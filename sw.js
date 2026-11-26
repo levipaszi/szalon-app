@@ -7,7 +7,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'atelier-szalon-v1.2.0';
+const CACHE_NAME = 'forfex-vip-v1.3.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -52,7 +52,7 @@ if (typeof firebase !== 'undefined' && FIREBASE_SW_CONFIG.apiKey) {
       if (payload.notification) return;
 
       const data = payload.data || {};
-      const title = data.title || 'Atelier Szalon';
+      const title = data.title || 'Forfex VIP';
       const body = data.body || 'Új értesítésed érkezett!';
       const targetUrl = data.url || 'https://levipaszi.github.io/szalon-app/index.html';
       const icon = targetUrl.includes('admin')

@@ -6,7 +6,7 @@
 
 window.APP_CONFIG = {
   // 1. Szalon alapadatok (szabadon átírhatod a saját szalonod nevére)
-  SALON_NAME: 'Atelier Szalon',
+  SALON_NAME: 'Forfex VIP',
   SOS_PHONE_RAW: '+36702155375',
   SOS_PHONE_DISPLAY: '+36 70 215 5375',
   SOS_MULTIPLIER: 4,

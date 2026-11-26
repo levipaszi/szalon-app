@@ -352,7 +352,7 @@
   function onForegroundPush(cb) {
     if (messaging) {
       messaging.onMessage((payload) => {
-        const title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || 'Atelier Szalon';
+        const title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || 'Forfex VIP';
         const body = (payload.notification && payload.notification.body) || (payload.data && payload.data.body) || '';
         cb({ title, body, raw: payload });
       });

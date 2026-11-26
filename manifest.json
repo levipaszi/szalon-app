@@ -1,6 +1,6 @@
 {
-  "name": "Atelier Szalon – VIP Vendég",
-  "short_name": "Atelier VIP",
+  "name": "Forfex VIP",
+  "short_name": "Forfex VIP",
   "description": "Személyre szabott fodrászati időpontok, hajápolási tanácsadó és VIP villám-időpontok.",
   "start_url": "./index.html",
   "scope": "./",

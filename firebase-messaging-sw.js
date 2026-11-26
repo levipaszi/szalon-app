@@ -28,7 +28,7 @@ if (isConfigured) {
     const title =
       (payload.notification && payload.notification.title) ||
       (payload.data && payload.data.title) ||
-      'Atelier Szalon';
+      'Forfex VIP';
     const body =
       (payload.notification && payload.notification.body) ||
       (payload.data && payload.data.body) ||

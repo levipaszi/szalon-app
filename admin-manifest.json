@@ -1,6 +1,6 @@
 {
-  "name": "Atelier Szalon – Admin Vezérlő",
-  "short_name": "Atelier Admin",
+  "name": "Forfex Admin",
+  "short_name": "Forfex Admin",
   "description": "Fodrász adminisztrációs felület: napi naptár, SOS és villám-időpontok, vendégkezelés.",
   "start_url": "./admin.html",
   "scope": "./",

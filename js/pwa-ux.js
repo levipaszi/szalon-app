@@ -212,7 +212,7 @@
       return;
     }
 
-    const appLabel = role === 'admin' ? 'Admin Alkalmazás' : 'Szalon VIP Alkalmazás';
+    const appLabel = role === 'admin' ? 'Forfex Admin' : 'Forfex VIP';
     const subCopy =
       role === 'admin'
         ? 'Tedd ki a telefonod asztalára külön Admin ikonként, hogy a beérkező SOS kérésekről és késésekről azonnal hangos értesítést kapj!'
