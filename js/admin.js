@@ -267,8 +267,7 @@
     const sosList = $('#adminSosList');
     const pendingSos = state.sosRequests.filter((r) => r.status === 'pending');
     const historySos = state.sosRequests.filter((r) => r.status !== 'pending').slice(0, 5);
-
-    $('#adminSosNavDot').classList.toggle('hidden', pendingSos.length === 0);
+    renderAdminUrgentAlerts();
 
     let sosHtml = '';
     if (pendingSos.length) {
@@ -408,8 +407,7 @@
   function renderGuests() {
     const pending = state.guests.filter((g) => !g.paired);
     const paired = state.guests.filter((g) => g.paired).sort((a, b) => a.name.localeCompare(b.name, 'hu'));
-
-    $('#adminGuestNavDot').classList.toggle('hidden', pending.length === 0);
+    renderAdminUrgentAlerts();
 
     const pendingEl = $('#adminPendingGuests');
     if (pending.length) {
@@ -832,28 +830,171 @@
     });
   }
 
+  function switchAdminTab(target) {
+    $$('.tab-section').forEach((s) => s.classList.toggle('active', s.id === `admin-tab-${target}`));
+    $$('[data-admin-tab]').forEach((b) => b.classList.toggle('active', b.dataset.adminTab === target));
+    if (target === 'settings') renderQrCodes();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function renderAdminUrgentAlerts() {
+    if (!window.PwaUX) return;
+    const now = new Date();
+    const gMap = guestMap();
+    const alerts = [];
+
+    // 1. Függőben lévő 4x SOS kérések (LEGKIEMELTEBB PIROS PULZÁLÓ SÁV)
+    const pendingSos = state.sosRequests.filter((r) => r.status === 'pending');
+    pendingSos.forEach((req) => {
+      alerts.push({
+        type: 'danger',
+        icon: '🚨',
+        title: `SOS (4x ÁR) KÉRÉS: ${req.guestName}`,
+        subtitle: `${req.serviceName} (${formatHuf(req.sosPrice)}) · ${req.intervalSummary}`,
+        cta: 'Elbírálás',
+        onClick: () => switchAdminTab('flashsos')
+      });
+    });
+
+    // 2. Mai 10 perces késések
+    const lateToday = state.appointments.filter(
+      (a) => a.lateNotice && isSameDay(new Date(a.startIso), now)
+    );
+    lateToday.forEach((a) => {
+      const g = gMap[a.guestId] || {};
+      alerts.push({
+        type: 'danger',
+        icon: '⏱️',
+        title: `+10 PERC KÉSÉS: ${g.name || a.title || 'Vendég'}`,
+        subtitle: `Mai időpont: ${formatTimeRange(a.startIso, a.endIso)}`,
+        cta: 'Naptár',
+        onClick: () => switchAdminTab('calendar')
+      });
+    });
+
+    // 3. Aktív villám-időpont jelentkezők
+    let flashApplicantsCount = 0;
+    state.flashSlots
+      .filter((s) => s.status === 'open')
+      .forEach((s) => {
+        flashApplicantsCount += Object.keys(s.applicants || {}).length;
+      });
+    if (flashApplicantsCount > 0) {
+      alerts.push({
+        type: 'accent',
+        icon: '⚡',
+        title: `${flashApplicantsCount} VIP VILLÁM-JELENTKEZŐ VÁR JÓVÁHAGYÁSRA!`,
+        subtitle: 'Válaszd ki, kié legyen a felszabadult időpont.',
+        cta: 'Megnézem',
+        onClick: () => switchAdminTab('flashsos')
+      });
+    }
+
+    // 4. Párosításra váró új vendégek
+    const pendingGuests = state.guests.filter((g) => !g.paired);
+    if (pendingGuests.length > 0) {
+      alerts.push({
+        type: 'accent',
+        icon: '👤',
+        title: `${pendingGuests.length} új vendég párosításra vár`,
+        subtitle: 'Add meg a Google Naptár nevét a szinkronhoz.',
+        cta: 'Párosítás',
+        onClick: () => switchAdminTab('guests')
+      });
+    }
+
+    window.PwaUX.renderUrgentStack('adminUrgentStack', alerts);
+    window.PwaUX.setNavBadge('adminCalNavBadge', lateToday.length, lateToday.length > 0);
+    window.PwaUX.setNavBadge('adminSosNavBadge', pendingSos.length + flashApplicantsCount, pendingSos.length > 0 || flashApplicantsCount > 0);
+    window.PwaUX.setNavBadge('adminGuestNavBadge', pendingGuests.length, false);
+  }
+
   let subscriptionsStarted = false;
   function startAdminSubscriptions() {
     if (subscriptionsStarted) return;
     subscriptionsStarted = true;
 
+    let guestsLoaded = false;
+    let prevPendingGuestIds = new Set();
     window.SalonService.subscribeAllGuests((guests) => {
+      const pendingNow = guests.filter((g) => !g.paired);
+      if (guestsLoaded && window.PwaUX) {
+        const newest = pendingNow.find((g) => !prevPendingGuestIds.has(g.id));
+        if (newest) {
+          window.PwaUX.playTone('normal');
+          window.PwaUX.vibrate('normal');
+          showToast(`👤 Új vendég regisztrált: ${newest.name}`);
+        }
+      }
+      prevPendingGuestIds = new Set(pendingNow.map((g) => g.id));
+      guestsLoaded = true;
       state.guests = guests;
       renderGuests();
       renderCalendar();
     });
 
+    let apptsLoaded = false;
+    let prevLateIds = new Set();
     window.SalonService.subscribeAllAppointments((appts) => {
+      const lateNow = appts.filter((a) => a.lateNotice && isSameDay(new Date(a.startIso), new Date()));
+      if (apptsLoaded && window.PwaUX) {
+        const newLate = lateNow.find((a) => !prevLateIds.has(a.id));
+        if (newLate) {
+          const g = guestMap()[newLate.guestId] || {};
+          window.PwaUX.showAttentionAlert({
+            title: '⏱️ +10 perc késés jelzés!',
+            body: `${g.name || newLate.title || 'Egy vendéged'} jelezte, hogy 10 percet késik a mai időpontjáról (${formatTimeRange(newLate.startIso, newLate.endIso)}).`,
+            level: 'urgent',
+            actionLabel: 'Naptár megnyitása',
+            onAction: () => switchAdminTab('calendar')
+          });
+        }
+      }
+      prevLateIds = new Set(lateNow.map((a) => a.id));
+      apptsLoaded = true;
       state.appointments = appts;
       renderCalendar();
+      renderAdminUrgentAlerts();
     });
 
+    let sosLoaded = false;
+    let prevSosIds = new Set();
     window.SalonService.subscribeAllSos((sos) => {
+      const pendingNow = sos.filter((r) => r.status === 'pending');
+      if (sosLoaded && window.PwaUX) {
+        const newSos = pendingNow.find((r) => !prevSosIds.has(r.id));
+        if (newSos) {
+          window.PwaUX.showAttentionAlert({
+            title: '🚨 ÚJ SOS (4x ÁR) KÉRÉS!',
+            body: `${newSos.guestName}: ${newSos.serviceName} (${formatHuf(newSos.sosPrice)}) – ${newSos.intervalSummary}`,
+            level: 'urgent',
+            actionLabel: 'Elbírálás most',
+            onAction: () => switchAdminTab('flashsos')
+          });
+        }
+      }
+      prevSosIds = new Set(pendingNow.map((r) => r.id));
+      sosLoaded = true;
       state.sosRequests = sos;
       renderFlashAndSos();
     });
 
+    let flashLoaded = false;
+    let prevApplicantCount = 0;
     window.SalonService.subscribeFlashSlots((slots) => {
+      let count = 0;
+      slots.filter((s) => s.status === 'open').forEach((s) => { count += Object.keys(s.applicants || {}).length; });
+      if (flashLoaded && count > prevApplicantCount && window.PwaUX) {
+        window.PwaUX.showAttentionAlert({
+          title: '⚡ Új Villám-időpont jelentkező!',
+          body: 'Egy vendéged jelentkezett az aktív VIP villám-időpontra!',
+          level: 'urgent',
+          actionLabel: 'Jelentkezők megnyitása',
+          onAction: () => switchAdminTab('flashsos')
+        });
+      }
+      prevApplicantCount = count;
+      flashLoaded = true;
       state.flashSlots = slots;
       renderFlashAndSos();
     });
@@ -875,11 +1016,29 @@
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
 
+    if (window.PwaUX) {
+      window.PwaUX.initInstallPrompt({
+        role: 'admin',
+        containerId: 'adminInstallBanner',
+        headerBtnId: 'adminInstallHeaderBtn'
+      });
+    }
+
     const { demoMode } = await window.SalonService.init();
     if (demoMode) $('#adminDemoBanner').classList.remove('hidden');
 
     window.SalonService.onForegroundPush(({ title, body }) => {
-      showToast(`${title}${body ? ' – ' + body : ''}`);
+      if (window.PwaUX) {
+        window.PwaUX.showAttentionAlert({
+          title,
+          body,
+          level: 'urgent',
+          actionLabel: /sos|villám/i.test(`${title} ${body}`) ? 'Villám & SOS megnyitása' : 'Naptár megnyitása',
+          onAction: () => switchAdminTab(/sos|villám/i.test(`${title} ${body}`) ? 'flashsos' : 'calendar')
+        });
+      } else {
+        showToast(`${title}${body ? ' – ' + body : ''}`);
+      }
     });
 
     // Alapértelmezett villám-időpont mező (holnap 15:00)

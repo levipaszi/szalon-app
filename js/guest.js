@@ -713,8 +713,59 @@
         </div>`;
     }
 
-    $('#apptNavDot').classList.toggle('hidden', !hasBadgeAlert);
+    const openFlashCount = state.flashSlots.filter((s) => s.status === 'open').length;
+    const sosApprovedCount = latestSos && latestSos.status === 'approved' ? 1 : 0;
+    const totalUrgent = openFlashCount + sosApprovedCount;
+    if (window.PwaUX) {
+      window.PwaUX.setNavBadge('apptNavBadge', totalUrgent, totalUrgent > 0);
+    }
+    renderGuestUrgentAlerts();
     populateSosServices();
+  }
+
+  function renderGuestUrgentAlerts() {
+    if (!window.PwaUX || !state.guest) return;
+    const alerts = [];
+    const latestSos = state.sosRequests[0];
+
+    if (latestSos && latestSos.status === 'approved') {
+      alerts.push({
+        type: 'success',
+        icon: '✅',
+        title: 'SOS KÉRÉSED ELFOGADVA!',
+        subtitle: `Hívj a ${window.APP_CONFIG.SOS_PHONE_DISPLAY} számon a pontosításért!`,
+        cta: '📞 Hívás',
+        href: `tel:${window.APP_CONFIG.SOS_PHONE_RAW}`
+      });
+    }
+
+    const openUnapplied = state.flashSlots.filter(
+      (s) => s.status === 'open' && !(s.applicants && s.applicants[state.guestId])
+    );
+    if (openUnapplied.length) {
+      alerts.push({
+        type: 'accent',
+        icon: '⚡',
+        title: `ÚJ VIP VILLÁM-IDŐPONT SZABADULT FEL! (${openUnapplied.length})`,
+        subtitle: 'Koppints, és jelentkezz egy érintéssel!',
+        cta: 'Megnézem',
+        onClick: () => switchTab('appointments')
+      });
+    }
+
+    const { nextAppt } = getNextAndPastAppointments();
+    if (nextAppt && isSameCalendarDay(new Date(nextAppt.startIso), new Date())) {
+      alerts.push({
+        type: 'accent',
+        icon: '📅',
+        title: `Ma várunk a szalonban! (${new Date(nextAppt.startIso).toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })})`,
+        subtitle: 'Állítsd be a kávéd, hangulatod, vagy jelezz ha 10 percet késel.',
+        cta: 'Főoldal',
+        onClick: () => switchTab('home')
+      });
+    }
+
+    window.PwaUX.renderUrgentStack('guestUrgentStack', alerts);
   }
 
   function populateSosServices() {
@@ -788,6 +839,10 @@
 
     $('#kidsPricingNote').textContent =
       p.kidsNote || 'A gyerek nyírás iskolás korig ingyenes, onnantól a fenti árak érvényesek.';
+    const vatEl = $('#vatPricingNote');
+    if (vatEl) {
+      vatEl.textContent = p.vatNote || 'Az árak forintban értendők és az ÁFA-t tartalmazzák (alanyi adómentes).';
+    }
   }
 
   // ---------------- ESEMÉNYKEZELŐK ----------------
@@ -1056,6 +1111,7 @@
     window.SalonService.subscribeGuestAppointments(state.guestId, (appts) => {
       state.appointments = appts;
       renderHome();
+      renderGuestUrgentAlerts();
     });
 
     window.SalonService.subscribePricing((pricing) => {
@@ -1064,12 +1120,56 @@
       populateSosServices();
     });
 
+    let flashLoaded = false;
+    let prevOpenFlashIds = new Set();
     window.SalonService.subscribeFlashSlots((slots) => {
+      const openNow = slots.filter((s) => s.status === 'open');
+      if (flashLoaded && window.PwaUX) {
+        const brandNew = openNow.find((s) => !prevOpenFlashIds.has(s.id));
+        if (brandNew) {
+          window.PwaUX.showAttentionAlert({
+            title: '⚡ Új VIP Villám-időpont!',
+            body: brandNew.note || 'Most szabadult fel egy villám-időpont! Jelentkezz, amíg szabad!',
+            level: 'urgent',
+            actionLabel: 'Megnézem és jelentkezem',
+            onAction: () => switchTab('appointments')
+          });
+        }
+      }
+      prevOpenFlashIds = new Set(openNow.map((s) => s.id));
+      flashLoaded = true;
       state.flashSlots = slots;
       renderAppointmentsTab();
     });
 
+    let sosLoaded = false;
+    let prevSosStatus = {};
     window.SalonService.subscribeGuestSos(state.guestId, (reqs) => {
+      if (sosLoaded && window.PwaUX) {
+        reqs.forEach((r) => {
+          const old = prevSosStatus[r.id];
+          if (old && old !== r.status) {
+            if (r.status === 'approved') {
+              window.PwaUX.showAttentionAlert({
+                title: '✅ SOS Kérésed Elfogadva!',
+                body: `Kérlek, hívj a ${window.APP_CONFIG.SOS_PHONE_DISPLAY} számon a pontosításért!`,
+                level: 'success',
+                actionLabel: `📞 Hívás: ${window.APP_CONFIG.SOS_PHONE_DISPLAY}`,
+                href: `tel:${window.APP_CONFIG.SOS_PHONE_RAW}`
+              });
+            } else if (r.status === 'rejected') {
+              window.PwaUX.showAttentionAlert({
+                title: 'SOS kérés válasza',
+                body: 'Sajnos a megadott időintervallumban a körülmények most nem engedik, hogy megoldjam ezt az időpontot.',
+                level: 'normal'
+              });
+            }
+          }
+        });
+      }
+      prevSosStatus = {};
+      reqs.forEach((r) => { prevSosStatus[r.id] = r.status; });
+      sosLoaded = true;
       state.sosRequests = reqs;
       renderAppointmentsTab();
     });
@@ -1100,8 +1200,27 @@
     const { demoMode } = await window.SalonService.init();
     if (demoMode) $('#demoBanner').classList.remove('hidden');
 
+    if (window.PwaUX) {
+      window.PwaUX.initInstallPrompt({
+        role: 'guest',
+        containerId: 'guestInstallBanner',
+        headerBtnId: 'guestInstallHeaderBtn'
+      });
+    }
+
     window.SalonService.onForegroundPush(({ title, body }) => {
-      showToast(`${title}${body ? ' – ' + body : ''}`);
+      if (window.PwaUX) {
+        const isUrgent = /sos|villám|változott|1 óra/i.test(`${title} ${body}`);
+        window.PwaUX.showAttentionAlert({
+          title,
+          body,
+          level: isUrgent ? 'urgent' : 'normal',
+          actionLabel: /sos|villám/i.test(`${title} ${body}`) ? 'Időpontok megnyitása' : '',
+          onAction: () => switchTab('appointments')
+        });
+      } else {
+        showToast(`${title}${body ? ' – ' + body : ''}`);
+      }
     });
 
     setupDisclosures();

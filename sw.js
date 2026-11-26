@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atelier-szalon-v1.0.0';
+const CACHE_NAME = 'atelier-szalon-v1.1.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const APP_SHELL = [
   './css/styles.css',
   './js/config.js',
   './js/firebase-service.js',
+  './js/pwa-ux.js',
   './js/haircare-data.js',
   './js/qrcode-gen.js',
   './js/guest.js',

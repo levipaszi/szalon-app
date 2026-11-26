@@ -1373,3 +1373,204 @@ a {
     display: none !important;
   }
 }
+
+
+/* ==========================================================================
+   PWA TELEPÍTÉS KÁRTYA + HATÁROZOTT, PULZÁLÓ ÉRTESÍTÉSEK ÉS SZÁMLÁLÓK
+   ========================================================================== */
+
+.install-card {
+  margin: 14px 0 8px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(145deg, var(--surface) 0%, color-mix(in srgb, var(--accent) 16%, var(--surface)) 100%);
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+  animation: fadeSlide 0.25s ease;
+}
+
+.ios-install-steps {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.86rem;
+}
+
+/* Határozott, pulzáló sürgős értesítési sávok (minden fül tetején látható!) */
+.urgent-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.urgent-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--danger);
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.24), rgba(153, 27, 27, 0.14));
+  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.28);
+  animation: urgentPulse 1.8s infinite;
+}
+
+.urgent-banner.urgent-success {
+  border-color: #22C55E;
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.24), rgba(212, 163, 115, 0.18));
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.28);
+  animation: successPulse 2s infinite;
+}
+
+.urgent-banner.urgent-accent {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 26%, var(--surface)), var(--surface));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 26%, transparent);
+  animation: accentPulse 2s infinite;
+}
+
+.urgent-banner-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.urgent-banner-icon {
+  font-size: 1.55rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.urgent-banner-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.urgent-banner-sub {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+@keyframes urgentPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55); }
+  50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+}
+
+@keyframes successPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+  50% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+}
+
+@keyframes accentPulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  50% { box-shadow: 0 0 0 8px transparent; }
+}
+
+/* Nagy, számlálós pulzáló badge az alsó navigációban */
+.nav-badge {
+  position: absolute;
+  top: 5px;
+  right: calc(50% - 22px);
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.nav-badge.nav-badge-urgent {
+  background: #EF4444;
+  color: #FFFFFF;
+  animation: urgentPulse 1.4s infinite;
+}
+
+/* Feltűnő, eltéveszthetetlen felugró riasztás modál */
+.attention-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeSlide 0.18s ease;
+}
+
+.attention-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 26px 22px;
+  text-align: center;
+  border: 2.5px solid var(--accent);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+.attention-card.attention-urgent {
+  border-color: #EF4444;
+  box-shadow: 0 0 36px rgba(239, 68, 68, 0.42);
+}
+
+.attention-card.attention-success {
+  border-color: #22C55E;
+  box-shadow: 0 0 36px rgba(34, 197, 94, 0.38);
+}
+
+.attention-icon {
+  font-size: 2.8rem;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+
+.attention-title {
+  font-size: 1.32rem;
+  margin-bottom: 8px;
+}
+
+.attention-body {
+  font-size: 0.96rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+.attention-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Kiemelt Push értesítés engedélyező kártya */
+.push-cta-banner {
+  margin: 12px 0 6px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.2), rgba(200, 125, 85, 0.14));
+  border: 1.5px solid var(--warning);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.88rem;
+}

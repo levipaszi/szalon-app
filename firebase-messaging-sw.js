@@ -39,11 +39,25 @@ if (isConfigured) {
         ? './icons/admin-192.png'
         : './icons/guest-192.png';
 
+    const isUrgent = /sos|késés|villám|változott|1 óra/i.test(`${title} ${body}`);
+    const tag = /sos/i.test(title)
+      ? 'atelier-sos'
+      : /késés/i.test(title)
+        ? 'atelier-late'
+        : /villám/i.test(title)
+          ? 'atelier-flash'
+          : 'atelier-notice';
+
     self.registration.showNotification(title, {
       body,
       icon,
       badge: icon,
-      vibrate: [180, 80, 180],
+      tag,
+      renotify: true,
+      requireInteraction: true,
+      silent: false,
+      vibrate: isUrgent ? [320, 120, 320, 120, 500] : [200, 100, 200],
+      actions: [{ action: 'open', title: 'Megnyitás most' }],
       data: { url: targetUrl }
     });
   });

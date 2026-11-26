@@ -213,8 +213,12 @@
         try {
           await db.enablePersistence({ synchronizeTabs: true });
         } catch (_) {}
-        if (firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported()) {
-          messaging = firebase.messaging();
+        try {
+          if (firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported()) {
+            messaging = firebase.messaging();
+          }
+        } catch (msgErr) {
+          console.warn('FCM nem érhető el ezen a böngészőn:', msgErr);
         }
         demoMode = false;
       } catch (err) {
@@ -460,27 +464,37 @@
 
   // ---------------- ÁRLISTA ----------------
   function subscribePricing(cb) {
+    const def = global.APP_CONFIG.DEFAULT_PRICING;
+    const targetVer = (def && def.pricingVersion) || 2;
     if (demoMode) {
-      return subscribeDemo((state) => cb(state.pricing || global.APP_CONFIG.DEFAULT_PRICING));
+      return subscribeDemo((state) => {
+        if (!state.pricing || (state.pricing.pricingVersion || 0) < targetVer) {
+          state.pricing = JSON.parse(JSON.stringify(def));
+          saveDemoDB(state);
+        }
+        cb(state.pricing);
+      });
     }
     return db.collection('settings').doc('pricing').onSnapshot(async (snap) => {
-      if (snap.exists) {
-        cb(snap.data());
+      const data = snap.exists ? snap.data() : null;
+      if (data && (data.pricingVersion || 0) >= targetVer) {
+        cb(data);
       } else {
-        await db.collection('settings').doc('pricing').set(global.APP_CONFIG.DEFAULT_PRICING);
-        cb(global.APP_CONFIG.DEFAULT_PRICING);
+        await db.collection('settings').doc('pricing').set(def);
+        cb(def);
       }
     });
   }
 
   async function savePricing(pricingData) {
+    const payload = Object.assign({ pricingVersion: (global.APP_CONFIG.DEFAULT_PRICING && global.APP_CONFIG.DEFAULT_PRICING.pricingVersion) || 2 }, pricingData);
     if (demoMode) {
       const state = loadDemoDB();
-      state.pricing = pricingData;
+      state.pricing = payload;
       saveDemoDB(state);
       return;
     }
-    await db.collection('settings').doc('pricing').set(pricingData, { merge: true });
+    await db.collection('settings').doc('pricing').set(payload, { merge: true });
   }
 
   // ---------------- SOS VÉSZHELYZETI KÉRÉSEK ----------------
