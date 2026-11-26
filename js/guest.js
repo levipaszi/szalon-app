@@ -208,20 +208,25 @@
         ${nextAppt.title ? `<p class="muted small mt-1">${esc(nextAppt.title)}</p>` : ''}
       `;
 
-      // Időpont napján megjelenő 10 perc késés gomb
+      // Időpont napján aktív 10 perc késés gomb (más napokon inaktív tájékoztatóként látható, hogy a vendég mindig tudja, hol találja)
+      lateWrap.classList.remove('hidden');
       if (isToday) {
-        lateWrap.classList.remove('hidden');
         if (nextAppt.lateNotice) {
           lateBtn.disabled = true;
+          lateBtn.className = 'btn btn-secondary btn-block';
           lateBtn.textContent = '✓ 10 perces késés elküldve a fodrászodnak';
           lateStatus.textContent = 'Köszönjük, hogy szóltál!';
         } else {
           lateBtn.disabled = false;
+          lateBtn.className = 'btn btn-danger btn-block';
           lateBtn.textContent = '⏱️ Késni fogok 10 percet';
           lateStatus.textContent = 'Azonnali értesítést küld a fodrászodnak.';
         }
       } else {
-        lateWrap.classList.add('hidden');
+        lateBtn.disabled = true;
+        lateBtn.className = 'btn btn-secondary btn-block';
+        lateBtn.textContent = '⏱️ Késni fogok 10 percet';
+        lateStatus.textContent = 'Az időpontod napján (reggeltől) automatikusan aktív lesz ez a gomb.';
       }
 
       // Check-in kártya frissítése
