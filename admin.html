@@ -252,16 +252,34 @@
 
       <div class="card">
         <div class="card-eyebrow">Biztonság</div>
-        <h2 class="card-title">Admin PIN-kód módosítása</h2>
-        <div class="form-group mt-2">
-          <label class="form-label" for="newPinInput">Új PIN-kód (4–6 számjegy)</label>
-          <input class="input" type="password" inputmode="numeric" maxlength="6" id="newPinInput" placeholder="Pl. 2580" />
+        <h2 class="card-title">Biometrikus belépés &amp; PIN-kód</h2>
+
+        <!-- Biometrikus belépés (Face ID / Ujjlenyomat / Windows Hello) -->
+        <div class="protocol-step">
+          <div class="protocol-step-title">👆 Ujjlenyomat / Face ID belépés</div>
+          <p class="muted small" id="adminBioStatusText">Eszköz támogatásának ellenőrzése...</p>
+          <div class="stack-sm mt-2">
+            <button class="btn btn-primary btn-block" id="enableBioBtn" type="button">
+              👆 Biometrikus belépés bekapcsolása ezen az eszközön
+            </button>
+            <button class="btn btn-ghost btn-sm btn-block hidden" id="disableBioBtn" type="button">
+              Biometrikus belépés kikapcsolása
+            </button>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="confirmNewPinInput">Új PIN-kód megerősítése</label>
-          <input class="input" type="password" inputmode="numeric" maxlength="6" id="confirmNewPinInput" placeholder="Írd be újra" />
+
+        <div class="protocol-step">
+          <div class="protocol-step-title">🔑 Admin PIN-kód módosítása</div>
+          <div class="form-group mt-1">
+            <label class="form-label" for="newPinInput">Új PIN-kód (4–6 számjegy)</label>
+            <input class="input" type="password" inputmode="numeric" maxlength="6" id="newPinInput" placeholder="Pl. 2580" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="confirmNewPinInput">Új PIN-kód megerősítése</label>
+            <input class="input" type="password" inputmode="numeric" maxlength="6" id="confirmNewPinInput" placeholder="Írd be újra" />
+          </div>
+          <button class="btn btn-secondary btn-block" id="changePinBtn" type="button">PIN-kód frissítése</button>
         </div>
-        <button class="btn btn-primary btn-block" id="changePinBtn" type="button">PIN-kód frissítése</button>
       </div>
     </section>
   </main>
@@ -299,6 +317,11 @@
       <p class="muted small mt-1" id="pinSubtitle">Betöltés...</p>
 
       <div class="pin-dots" id="pinDots"></div>
+      <div id="bioLoginWrap" class="hidden" style="margin-bottom:16px;">
+        <button class="btn btn-primary btn-block" id="bioLoginBtn" type="button">
+          👆 Belépés ujjlenyomattal / Face ID-val
+        </button>
+      </div>
       <div class="pin-pad" id="pinPad">
         <button class="pin-key" type="button" data-key="1">1</button>
         <button class="pin-key" type="button" data-key="2">2</button>

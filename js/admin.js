@@ -6,6 +6,7 @@
   'use strict';
 
   const SESSION_UNLOCK_KEY = 'atelier_admin_unlocked_v1';
+  const BIO_CRED_KEY = 'forfex_admin_bio_cred_v1';
 
   const state = {
     adminConfig: { pinHash: '' },
@@ -77,6 +78,145 @@
     return m;
   }
 
+  // ---------------- BIOMETRIKUS AZONOSÍTÁS (WebAuthn: Face ID / Ujjlenyomat) ----------------
+  function bufToB64Url(buf) {
+    const bytes = new Uint8Array(buf);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function b64UrlToBuf(str) {
+    const pad = '='.repeat((4 - (str.length % 4)) % 4);
+    const b64 = (str + pad).replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  async function isBiometricsSupported() {
+    try {
+      return !!(
+        window.PublicKeyCredential &&
+        typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function' &&
+        (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function hasSavedBiometric() {
+    return !!localStorage.getItem(BIO_CRED_KEY);
+  }
+
+  async function updateBioSettingsUI() {
+    const statusEl = $('#adminBioStatusText');
+    const enableBtn = $('#enableBioBtn');
+    const disableBtn = $('#disableBioBtn');
+    if (!statusEl) return;
+
+    const supported = await isBiometricsSupported();
+    if (!supported) {
+      statusEl.textContent = 'Ez az eszköz / böngésző jelenleg nem támogatja a beépített biometrikus azonosítást.';
+      if (enableBtn) enableBtn.disabled = true;
+      if (disableBtn) disableBtn.classList.add('hidden');
+      return;
+    }
+
+    if (hasSavedBiometric()) {
+      statusEl.textContent = 'Aktív ezen az eszközön! A következő belépésnél ujjlenyomattal / Face ID-val is feloldhatod az Admin appot. ✅';
+      if (enableBtn) {
+        enableBtn.disabled = false;
+        enableBtn.textContent = '🔄 Biometrikus kulcs újrarögzítése';
+      }
+      if (disableBtn) disableBtn.classList.remove('hidden');
+    } else {
+      statusEl.textContent = 'Támogatott! Kapcsold be, hogy PIN helyett ujjlenyomattal vagy arcfelismeréssel is beléphess.';
+      if (enableBtn) {
+        enableBtn.disabled = false;
+        enableBtn.textContent = '👆 Biometrikus belépés bekapcsolása ezen az eszközön';
+      }
+      if (disableBtn) disableBtn.classList.add('hidden');
+    }
+  }
+
+  async function registerBiometrics() {
+    const supported = await isBiometricsSupported();
+    if (!supported) {
+      showToast('Ez az eszköz nem támogatja a biometrikus belépést.');
+      return;
+    }
+    try {
+      const challenge = new Uint8Array(32);
+      const userId = new Uint8Array(16);
+      window.crypto.getRandomValues(challenge);
+      window.crypto.getRandomValues(userId);
+
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: 'Forfex Admin', id: window.location.hostname },
+          user: { id: userId, name: 'forfex-admin', displayName: 'Forfex Admin' },
+          pubKeyCredParams: [
+            { alg: -7, type: 'public-key' },
+            { alg: -257, type: 'public-key' }
+          ],
+          authenticatorSelection: {
+            authenticatorAttachment: 'platform',
+            userVerification: 'required'
+          },
+          timeout: 60000
+        }
+      });
+
+      if (cred && cred.rawId) {
+        localStorage.setItem(BIO_CRED_KEY, bufToB64Url(cred.rawId));
+        await updateBioSettingsUI();
+        showToast('Biometrikus belépés sikeresen bekapcsolva! ✅');
+      }
+    } catch (err) {
+      if (err && err.name === 'NotAllowedError') {
+        showToast('A biometrikus regisztráció megszakítva.');
+      } else {
+        showToast('Nem sikerült a biometria beállítása ezen az eszközön.');
+      }
+    }
+  }
+
+  async function loginWithBiometrics(isAutoAttempt) {
+    const saved = localStorage.getItem(BIO_CRED_KEY);
+    if (!saved) return false;
+    try {
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          rpId: window.location.hostname,
+          allowCredentials: [
+            { id: b64UrlToBuf(saved), type: 'public-key', transports: ['internal'] }
+          ],
+          userVerification: 'required',
+          timeout: 60000
+        }
+      });
+      if (assertion) {
+        sessionStorage.setItem(SESSION_UNLOCK_KEY, '1');
+        $('#pinOverlay').classList.add('hidden');
+        startAdminSubscriptions();
+        showToast('Sikeres biometrikus belépés! ✅');
+        return true;
+      }
+    } catch (err) {
+      if (!isAutoAttempt) {
+        $('#pinError').textContent = 'A biometrikus azonosítás megszakadt – használd a PIN-kódot vagy próbáld újra.';
+      }
+    }
+    return false;
+  }
+
   // ---------------- PIN KEZELÉS ----------------
   function renderPinDots() {
     const count = Math.max(4, Math.min(6, state.pinBuffer.length || 4));
@@ -92,17 +232,26 @@
     state.pinBuffer = '';
     $('#pinError').textContent = '';
 
+    const bioWrap = $('#bioLoginWrap');
     if (!state.adminConfig.pinHash) {
       state.pinMode = 'setup1';
       $('#pinTitle').textContent = 'Admin PIN-kód létrehozása';
       $('#pinSubtitle').textContent = 'Első belépés: adj meg egy 4–6 számjegyű saját PIN-kódot, majd nyomd meg az OK gombot.';
+      if (bioWrap) bioWrap.classList.add('hidden');
     } else {
       state.pinMode = 'login';
       $('#pinTitle').textContent = 'Admin belépés';
-      $('#pinSubtitle').textContent = 'Írd be a 4–6 számjegyű Admin PIN-kódodat, majd nyomd meg az OK gombot.';
+      $('#pinSubtitle').textContent = hasSavedBiometric()
+        ? 'Lépj be ujjlenyomattal / Face ID-val, vagy írd be a PIN-kódodat.'
+        : 'Írd be a 4–6 számjegyű Admin PIN-kódodat, majd nyomd meg az OK gombot.';
+      if (bioWrap) bioWrap.classList.toggle('hidden', !hasSavedBiometric());
     }
     renderPinDots();
     $('#pinOverlay').classList.remove('hidden');
+
+    if (state.pinMode === 'login' && hasSavedBiometric()) {
+      setTimeout(() => loginWithBiometrics(true), 250);
+    }
   }
 
   async function handlePinSubmit() {
@@ -1097,6 +1246,24 @@
       printQrCard('qrAdminCanvas', 'Admin Vezérlőpult', 'Fodrász alkalmazás telepítéséhez')
     );
 
+    // Biometrikus belépés gombok
+    const bioLoginBtn = $('#bioLoginBtn');
+    if (bioLoginBtn) {
+      bioLoginBtn.addEventListener('click', () => loginWithBiometrics(false));
+    }
+    const enableBioBtn = $('#enableBioBtn');
+    if (enableBioBtn) {
+      enableBioBtn.addEventListener('click', registerBiometrics);
+    }
+    const disableBioBtn = $('#disableBioBtn');
+    if (disableBioBtn) {
+      disableBioBtn.addEventListener('click', async () => {
+        localStorage.removeItem(BIO_CRED_KEY);
+        await updateBioSettingsUI();
+        showToast('Biometrikus belépés kikapcsolva ezen az eszközön.');
+      });
+    }
+
     // PIN módosítás
     $('#changePinBtn').addEventListener('click', async () => {
       const p1 = $('#newPinInput').value.trim();
@@ -1410,6 +1577,7 @@
 
     setupPinPad();
     bindEvents();
+    updateBioSettingsUI();
 
     state.adminConfig = await window.SalonService.getAdminConfig();
 
