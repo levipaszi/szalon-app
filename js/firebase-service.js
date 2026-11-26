@@ -860,6 +860,51 @@
     });
   }
 
+  async function sendAppointmentReminder(apptId, guestId, title, body) {
+    if (apptId) {
+      await updateAppointmentMeta(apptId, {
+        reminderPending: true,
+        reminderMessage: body,
+        reminderSentAt: new Date().toISOString(),
+        attendanceStatus: 'pending',
+        attendanceAlertDismissed: false
+      });
+    }
+    return sendPushNotification({
+      targetRole: 'guest',
+      guestId,
+      title,
+      body,
+      url: './index.html'
+    });
+  }
+
+  async function respondAttendance(apptId, status, guestName, dateLabel) {
+    if (!apptId) return;
+    await updateAppointmentMeta(apptId, {
+      reminderPending: false,
+      attendanceStatus: status, // 'confirmed' | 'cancelled'
+      attendanceRespondedAt: new Date().toISOString(),
+      attendanceAlertDismissed: false
+    });
+    const isCancel = status === 'cancelled';
+    sendPushNotification({
+      targetRole: 'admin',
+      title: isCancel
+        ? `❌ LEMONDÁS: ${guestName || 'Vendég'} nem tud jönni!`
+        : `✅ Visszaigazolva: ${guestName || 'Vendég'} ott lesz!`,
+      body: isCancel
+        ? `${guestName || 'A vendég'} jelezte, hogy sajnos nem tud jönni (${dateLabel || 'következő időpont'}). Felszabadult a hely!`
+        : `${guestName || 'A vendég'} visszaigazolta, hogy jön (${dateLabel || 'következő időpont'}).`,
+      url: './admin.html'
+    }).catch(() => {});
+  }
+
+  async function dismissAttendanceAlert(apptId) {
+    if (!apptId) return;
+    await updateAppointmentMeta(apptId, { attendanceAlertDismissed: true });
+  }
+
   // ---------------- VIP VILLÁM-IDŐPONTOK ----------------
   async function createFlashSlot(slot) {
     const id = genId('flash');
@@ -1160,6 +1205,9 @@
     respondSosRequest,
     deleteSosRequest,
     dismissLateNotice,
+    sendAppointmentReminder,
+    respondAttendance,
+    dismissAttendanceAlert,
     createFlashSlot,
     subscribeFlashSlots,
     applyToFlashSlot,

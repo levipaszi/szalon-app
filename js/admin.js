@@ -24,6 +24,7 @@
     reminderTarget: null,
     activeChatGuestId: null,
     guestSearchQuery: '',
+    familySearchQuery: '',
     selectedFamilyIds: new Set(),
     contact: {
       phoneRaw: window.APP_CONFIG.SOS_PHONE_RAW,
@@ -405,6 +406,14 @@
              <button class="btn btn-sm btn-ghost" style="min-height:28px;padding:2px 8px;font-size:0.76rem;" type="button" data-dismiss-late="${appt.id}">✕ Törlés</button>`
           : '';
 
+        const rsvpBadge = appt.attendanceStatus === 'confirmed'
+          ? `<span class="badge badge-success">✅ Ott lesz</span>`
+          : appt.attendanceStatus === 'cancelled'
+            ? `<span class="badge badge-danger">❌ LEMONDTA (Nem tud jönni!)</span>${!appt.attendanceAlertDismissed ? `<button class="btn btn-sm btn-ghost" style="min-height:28px;padding:2px 8px;font-size:0.76rem;" type="button" data-dismiss-rsvp="${appt.id}">✕ Jelzés törlése</button>` : ''}`
+            : appt.reminderPending
+              ? `<span class="badge badge-accent">⏳ Visszajelzésre vár</span>`
+              : '';
+
         const photoBlock = appt.photoDataUrl || appt.photoNote
           ? `
             <div class="disclosure mt-2" id="adminPhoto_${appt.id}">
@@ -427,6 +436,7 @@
                   ${genderBadge}
                   <span class="badge">${appt.durationMin || 60} perc</span>
                   ${lateBadge}
+                  ${rsvpBadge}
                 </div>
                 <h3 class="mt-1">${esc(g.name || appt.title || 'Vendég')}</h3>
                 <div class="small muted">${esc(formatHuDateFull(appt.startIso))} · <strong>${esc(formatTimeRange(appt.startIso, appt.endIso))}</strong></div>
@@ -460,6 +470,13 @@
       btn.addEventListener('click', async () => {
         await window.SalonService.dismissLateNotice(btn.dataset.dismissLate);
         showToast('10 perces késés jelzés törölve.');
+      });
+    });
+
+    $$('[data-dismiss-rsvp]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await window.SalonService.dismissAttendanceAlert(btn.dataset.dismissRsvp);
+        showToast('Lemondás jelzés eltávolítva.');
       });
     });
 
@@ -841,7 +858,27 @@
     });
     const groups = Object.values(groupsMap);
     const allSorted = state.guests.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hu'));
+    const famQ = normSearch(state.familySearchQuery);
+    const filteredForPicker = famQ
+      ? allSorted.filter((g) => normSearch(g.name).includes(famQ) || normSearch(g.calendarKeyword).includes(famQ))
+      : allSorted;
     const wasOpen = el.querySelector('#familyGroupDisc') && el.querySelector('#familyGroupDisc').classList.contains('open');
+
+    const selectedGuests = allSorted.filter((g) => state.selectedFamilyIds.has(g.id));
+    const selectedSummaryHtml = selectedGuests.length
+      ? `
+        <div class="chip-row mt-1" style="margin-bottom:8px;">
+          ${selectedGuests
+            .map(
+              (g) => `
+              <span class="badge badge-accent">
+                ✓ ${esc(g.name)}
+                <button type="button" data-fam-unpick="${g.id}" style="background:none;border:none;color:inherit;cursor:pointer;padding:0 2px;font-weight:700;">✕</button>
+              </span>`
+            )
+            .join('')}
+        </div>`
+      : '';
 
     const groupsHtml = !groups.length
       ? '<p class="small muted">Még nincs összevont családi csoport. Alább bármely 2 vagy több vendéget össze tudsz kapcsolni.</p>'
@@ -868,7 +905,7 @@
           )
           .join('');
 
-    const pickerChips = allSorted
+    const pickerChips = filteredForPicker
       .map((g) => {
         const sel = state.selectedFamilyIds.has(g.id);
         return `<button class="chip ${sel ? 'selected' : ''}" type="button" data-fam-pick="${g.id}">${esc(g.name)}${g.familyGroupId ? ' (csoportban)' : ''}</button>`;
@@ -895,8 +932,16 @@
                 <label class="form-label" for="familyGroupNameInput">Csoport neve (opcionális)</label>
                 <input class="input" id="familyGroupNameInput" type="text" placeholder="Pl. Kovács család" />
               </div>
-              <span class="form-label">Jelölj ki legalább 2 vendéget (${state.selectedFamilyIds.size} kijelölve):</span>
-              <div class="chip-row mt-1">${pickerChips || '<span class="small muted">Még nincs vendég.</span>'}</div>
+              <div class="form-group">
+                <label class="form-label" for="familyMemberSearchInput">🔍 Vendég keresése az összevonáshoz</label>
+                <div class="row-gap">
+                  <input class="input" id="familyMemberSearchInput" type="search" style="flex:1;" value="${esc(state.familySearchQuery)}" placeholder="Írd be a nevet (pl. Kovács)..." autocomplete="off" />
+                  ${state.familySearchQuery ? '<button class="icon-btn" id="familySearchClearBtn" type="button" aria-label="Törlés">✕</button>' : ''}
+                </div>
+              </div>
+              <span class="form-label">Kijelölt tagok (${state.selectedFamilyIds.size} fő):</span>
+              ${selectedSummaryHtml}
+              <div class="chip-row mt-1">${pickerChips || '<span class="small muted">Nincs a keresésnek megfelelő vendég.</span>'}</div>
               <button class="btn btn-primary btn-block mt-2" id="saveFamilyGroupBtn" type="button">
                 🔗 Kijelöltek összevonása (${state.selectedFamilyIds.size} fő)
               </button>
@@ -906,9 +951,30 @@
       </div>
     `;
 
-    $$('[data-fam-pick]').forEach((btn) => {
+    const famSearchInp = $('#familyMemberSearchInput');
+    if (famSearchInp) {
+      famSearchInp.addEventListener('input', () => {
+        const pos = famSearchInp.selectionStart;
+        state.familySearchQuery = famSearchInp.value || '';
+        renderFamilyGroups();
+        const nextInp = $('#familyMemberSearchInput');
+        if (nextInp) {
+          nextInp.focus();
+          try { nextInp.setSelectionRange(pos, pos); } catch (_) {}
+        }
+      });
+    }
+    const famClearBtn = $('#familySearchClearBtn');
+    if (famClearBtn) {
+      famClearBtn.addEventListener('click', () => {
+        state.familySearchQuery = '';
+        renderFamilyGroups();
+      });
+    }
+
+    $$('[data-fam-pick], [data-fam-unpick]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const gid = btn.dataset.famPick;
+        const gid = btn.dataset.famPick || btn.dataset.famUnpick;
         if (state.selectedFamilyIds.has(gid)) state.selectedFamilyIds.delete(gid);
         else state.selectedFamilyIds.add(gid);
         renderFamilyGroups();
@@ -1460,18 +1526,17 @@
       if (!state.reminderTarget) return;
       const { appt, guest } = state.reminderTarget;
       const custom = $('#reminderCustomMsg').value.trim();
-      const defaultMsg = `Emlékeztető: ${formatHuDateFull(appt.startIso)} (${formatTimeRange(appt.startIso, appt.endIso)}) – szeretettel várlak a szalonban!`;
+      const defaultMsg = `Emlékeztető: ${formatHuDateFull(appt.startIso)} (${formatTimeRange(appt.startIso, appt.endIso)}) – szeretettel várlak a szalonban! Kérlek, jelezd vissza, hogy ott leszel-e.`;
 
-      await window.SalonService.sendPushNotification({
-        targetRole: 'guest',
-        guestId: appt.guestId,
-        title: `🔔 Emlékeztető – ${window.APP_CONFIG.SALON_NAME}`,
-        body: custom || defaultMsg,
-        url: './index.html'
-      });
+      await window.SalonService.sendAppointmentReminder(
+        appt.id,
+        appt.guestId,
+        `🔔 Emlékeztető – ${window.APP_CONFIG.SALON_NAME}`,
+        custom || defaultMsg
+      );
 
       $('#reminderModal').classList.add('hidden');
-      showToast(`Extra emlékeztető elküldve: ${guest.name || appt.title}`);
+      showToast(`Extra emlékeztető + visszaigazolás kérés elküldve: ${guest.name || appt.title}`);
     });
 
     // Új Villám-időpont kiküldése
@@ -1633,6 +1698,27 @@
       });
     });
 
+    // 2b. Emlékeztetőre érkezett LEMONDÁSOK (felszabadult időpont!)
+    const cancelledAppts = state.appointments.filter(
+      (a) => a.attendanceStatus === 'cancelled' && !a.attendanceAlertDismissed && new Date(a.endIso || a.startIso) >= now
+    );
+    cancelledAppts.forEach((a) => {
+      const g = gMap[a.guestId] || {};
+      alerts.push({
+        type: 'danger',
+        icon: '❌',
+        title: `LEMONDÁS: ${g.name || a.title || 'Vendég'} nem tud jönni!`,
+        subtitle: `${formatHuDateFull(a.startIso)} · ${formatTimeRange(a.startIso, a.endIso)}`,
+        cta: '✓ Törlés',
+        onClick: async () => {
+          await window.SalonService.dismissAttendanceAlert(a.id);
+          showToast('Lemondás jelzés eltávolítva.');
+        },
+        secondaryCta: '⚡ Villám',
+        onSecondaryClick: () => switchAdminTab('flashsos')
+      });
+    });
+
     // 3. Aktív villám-időpont jelentkezők
     let flashApplicantsCount = 0;
     state.flashSlots
@@ -1758,8 +1844,14 @@
 
     let apptsLoaded = false;
     let prevLateIds = new Set();
+    let prevCancelledIds = new Set();
+    let prevConfirmedIds = new Set();
     window.SalonService.subscribeAllAppointments((appts) => {
-      const lateNow = appts.filter((a) => a.lateNotice && isSameDay(new Date(a.startIso), new Date()));
+      const now = new Date();
+      const lateNow = appts.filter((a) => a.lateNotice && isSameDay(new Date(a.startIso), now));
+      const cancelledNow = appts.filter((a) => a.attendanceStatus === 'cancelled' && !a.attendanceAlertDismissed && new Date(a.endIso || a.startIso) >= now);
+      const confirmedNow = appts.filter((a) => a.attendanceStatus === 'confirmed' && new Date(a.endIso || a.startIso) >= now);
+
       if (apptsLoaded && window.PwaUX) {
         const newLate = lateNow.find((a) => !prevLateIds.has(a.id));
         if (newLate) {
@@ -1772,8 +1864,28 @@
             onAction: () => switchAdminTab('calendar')
           });
         }
+        const newCancel = cancelledNow.find((a) => !prevCancelledIds.has(a.id));
+        if (newCancel) {
+          const g = guestMap()[newCancel.guestId] || {};
+          window.PwaUX.showAttentionAlert({
+            title: `❌ LEMONDÁS: ${g.name || newCancel.title || 'Vendég'}`,
+            body: `Jelezte, hogy sajnos nem tud elmenni (${formatHuDateFull(newCancel.startIso)} ${formatTimeRange(newCancel.startIso, newCancel.endIso)}). Akár ki is küldheted Villám-időpontként!`,
+            level: 'urgent',
+            actionLabel: '⚡ Villám-időpont küldése',
+            onAction: () => switchAdminTab('flashsos')
+          });
+        }
+        const newConfirm = confirmedNow.find((a) => !prevConfirmedIds.has(a.id));
+        if (newConfirm) {
+          const g = guestMap()[newConfirm.guestId] || {};
+          window.PwaUX.playTone('normal');
+          window.PwaUX.vibrate('normal');
+          showToast(`✅ ${g.name || 'Vendég'} visszaigazolta: Ott leszek!`);
+        }
       }
       prevLateIds = new Set(lateNow.map((a) => a.id));
+      prevCancelledIds = new Set(cancelledNow.map((a) => a.id));
+      prevConfirmedIds = new Set(confirmedNow.map((a) => a.id));
       apptsLoaded = true;
       state.appointments = appts;
       renderCalendar();

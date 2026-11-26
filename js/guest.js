@@ -206,11 +206,145 @@
     });
   }
 
+  // ---------------- SAJÁT TELEFONOS NAPTÁRBA MENTÉS (.ICS & GOOGLE CALENDAR) ----------------
+  function toIcsUtc(iso) {
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, '0');
+    return (
+      d.getUTCFullYear() +
+      pad(d.getUTCMonth() + 1) +
+      pad(d.getUTCDate()) +
+      'T' +
+      pad(d.getUTCHours()) +
+      pad(d.getUTCMinutes()) +
+      pad(d.getUTCSeconds()) +
+      'Z'
+    );
+  }
+
+  function escapeIcsText(str) {
+    return String(str || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/\n/g, '\\n')
+      .replace(/,/g, '\\,')
+      .replace(/;/g, '\\;');
+  }
+
+  function downloadIcsForAppointments(appts, filename) {
+    if (!appts || !appts.length) return;
+    const salon = window.APP_CONFIG.SALON_NAME || 'Forfex VIP';
+    const stamp = toIcsUtc(new Date().toISOString());
+    const events = appts.map((a) => {
+      const uid = `forfex-${String(a.eventId || a.id).replace(/[^a-zA-Z0-9_-]/g, '')}@forfex-vip`;
+      const summary = a.title ? `${salon} – ${a.title}` : `${salon} – Fodrászat időpont`;
+      const endIso = a.endIso || new Date(new Date(a.startIso).getTime() + (a.durationMin || 60) * 60000).toISOString();
+      return [
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${toIcsUtc(a.startIso)}`,
+        `DTEND:${toIcsUtc(endIso)}`,
+        `SUMMARY:${escapeIcsText(summary)}`,
+        `DESCRIPTION:${escapeIcsText('Forfex VIP fodrászati időpont')}`,
+        'BEGIN:VALARM',
+        'TRIGGER:-PT24H',
+        'ACTION:DISPLAY',
+        'DESCRIPTION:Holnap fodrász időpontod van!',
+        'END:VALARM',
+        'BEGIN:VALARM',
+        'TRIGGER:-PT1H',
+        'ACTION:DISPLAY',
+        'DESCRIPTION:1 óra múlva fodrász időpontod van!',
+        'END:VALARM',
+        'END:VEVENT'
+      ].join('\r\n');
+    });
+
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Forfex VIP//Szalon PWA//HU',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      ...events,
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'forfex-idopontok.ics';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    showToast('Naptárfájl letöltve! Koppints rá a saját naptáradba mentéshez.');
+  }
+
+  function buildGoogleCalendarUrl(appt) {
+    const salon = window.APP_CONFIG.SALON_NAME || 'Forfex VIP';
+    const summary = appt.title ? `${salon} – ${appt.title}` : `${salon} – Fodrászat időpont`;
+    const endIso = appt.endIso || new Date(new Date(appt.startIso).getTime() + (appt.durationMin || 60) * 60000).toISOString();
+    const dates = `${toIcsUtc(appt.startIso)}/${toIcsUtc(endIso)}`;
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(summary)}&dates=${encodeURIComponent(dates)}&details=${encodeURIComponent('Forfex VIP fodrászati időpont')}`;
+  }
+
+  function renderGuestReminderActionBox(allFuture) {
+    const box = $('#guestReminderActionBox');
+    if (!box || !state.guest) return;
+    const pendingRem = allFuture.find((a) => a.reminderPending && a.guestId === state.guestId);
+    if (!pendingRem) {
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      return;
+    }
+
+    const dateLabel = `${formatHuDateFull(pendingRem.startIso)} (${formatHuTimeRange(pendingRem.startIso, pendingRem.endIso)})`;
+    box.classList.remove('hidden');
+    box.innerHTML = `
+      <div class="card" style="border:2px solid var(--accent);background:linear-gradient(145deg,var(--surface),color-mix(in srgb,var(--accent) 18%,var(--surface)));box-shadow:0 12px 30px rgba(0,0,0,0.35);">
+        <div class="row-between">
+          <span class="card-eyebrow">🔔 Emlékeztető a fodrászodtól</span>
+          <span class="badge badge-danger">Visszajelzés kérése</span>
+        </div>
+        <h2 class="card-title mt-1">${esc(dateLabel)}</h2>
+        ${pendingRem.title ? `<p class="small mt-1" style="font-weight:600;">📝 ${esc(pendingRem.title)}</p>` : ''}
+        <p class="mt-1" style="font-size:0.95rem;">${esc(pendingRem.reminderMessage || 'Kérlek, jelezd vissza, hogy számíthatok-e rád ezen az időponton!')}</p>
+        <div class="stack-sm mt-2">
+          <button class="btn btn-success btn-block" type="button" data-rsvp-resp="confirmed" data-rsvp-id="${pendingRem.id}">
+            ✅ Igen, ott leszek!
+          </button>
+          <button class="btn btn-danger btn-block" type="button" data-rsvp-resp="cancelled" data-rsvp-id="${pendingRem.id}">
+            ❌ Sajnos nem tudok menni
+          </button>
+        </div>
+      </div>
+    `;
+
+    $$('[data-rsvp-resp]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const status = btn.dataset.rsvpResp;
+        const aid = btn.dataset.rsvpId;
+        if (status === 'cancelled' && !window.confirm('Biztosan jelzed a fodrászodnak, hogy sajnos nem tudsz elmenni erre az időpontra?')) {
+          return;
+        }
+        await window.SalonService.respondAttendance(aid, status, state.guest.name, dateLabel);
+        showToast(
+          status === 'confirmed'
+            ? 'Köszönjük! Visszaigazoltad a fodrászodnak, hogy ott leszel. ✅'
+            : 'Elküldve! Jelezted a fodrászodnak, hogy sajnos nem tudsz menni.'
+        );
+      });
+    });
+  }
+
   function renderHome() {
     if (!state.guest) return;
     $('#guestGreeting').textContent = `Szia, ${state.guest.name}!`;
 
     const { lastPast, nextAppt, allFuture } = getNextAndPastAppointments();
+    renderGuestReminderActionBox(allFuture);
     renderHairHealth(lastPast);
 
     const nextContent = $('#nextApptContent');
@@ -250,6 +384,11 @@
       const d = new Date(nextAppt.startIso);
       const isToday = isSameCalendarDay(d, new Date());
       const ownerLabel = getApptOwnerLabel(nextAppt);
+      const rsvpBadge = nextAppt.attendanceStatus === 'confirmed'
+        ? '<span class="badge badge-success">✅ Visszaigazolva: Ott leszek</span>'
+        : nextAppt.attendanceStatus === 'cancelled'
+          ? '<span class="badge badge-danger">❌ Jelezted: Nem tudsz menni</span>'
+          : '';
       nextContent.innerHTML = `
         <div class="next-appt-date">${esc(formatHuDateFull(nextAppt.startIso))}</div>
         <div class="row-gap">
@@ -257,9 +396,22 @@
           <span class="badge">${nextAppt.durationMin || 60} perc</span>
           ${ownerLabel ? `<span class="badge badge-accent">${esc(ownerLabel)}</span>` : ''}
           ${isToday ? '<span class="badge badge-success">Ma!</span>' : ''}
+          ${rsvpBadge}
         </div>
         ${nextAppt.title ? `<p class="small mt-1" style="font-weight:600;color:var(--text);">📝 ${esc(nextAppt.title)}</p>` : ''}
+        <div class="row-gap mt-2">
+          <button class="btn btn-sm btn-secondary" style="flex:1;" type="button" id="addNextToCalIcsBtn">
+            📅 Saját naptáramba
+          </button>
+          <a class="btn btn-sm btn-ghost" style="flex:1;" href="${esc(buildGoogleCalendarUrl(nextAppt))}" target="_blank" rel="noopener">
+            📆 Google Naptár
+          </a>
+        </div>
       `;
+      const addNextBtn = $('#addNextToCalIcsBtn');
+      if (addNextBtn) {
+        addNextBtn.addEventListener('click', () => downloadIcsForAppointments([nextAppt], 'forfex-kovetkezo-idopont.ics'));
+      }
 
       // Időpont napján aktív 10 perc késés gomb (más napokon inaktív tájékoztatóként látható, hogy a vendég mindig tudja, hol találja)
       lateWrap.classList.remove('hidden');
@@ -325,29 +477,38 @@
         grouped[y].push(appt);
       });
       const years = Object.keys(grouped).sort((a, b) => Number(a) - Number(b));
-      body.innerHTML = years
-        .map(
-          (year) => `
-          <div class="year-group">
-            <div class="year-heading">${year}</div>
-            ${grouped[year]
-              .map((a) => {
-                const ownerBadge = getApptOwnerLabel(a);
-                return `
-                <div class="appt-list-item">
-                  <div style="min-width:0;flex:1;">
-                    <div style="font-weight:600;font-size:0.93rem;">${esc(formatHuDateFull(a.startIso))}</div>
-                    <div class="small muted">${esc(formatHuTimeRange(a.startIso, a.endIso))} · ${a.durationMin || 60} perc</div>
-                    ${a.title ? `<div class="small" style="margin-top:3px;font-weight:500;color:var(--text);">📝 ${esc(a.title)}</div>` : ''}
-                    ${ownerBadge ? `<div style="margin-top:4px;"><span class="badge">${esc(ownerBadge)}</span></div>` : ''}
-                  </div>
-                  <span class="badge badge-accent">${new Date(a.startIso).toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>`;
-              })
-              .join('')}
-          </div>`
-        )
-        .join('');
+      body.innerHTML = `
+        <button class="btn btn-secondary btn-sm btn-block" id="exportAllApptsIcsBtn" type="button" style="margin-bottom:12px;">
+          📅 Összes jövőbeli időpont mentése a telefonom naptárába (${allFuture.length})
+        </button>
+        ${years
+          .map(
+            (year) => `
+            <div class="year-group">
+              <div class="year-heading">${year}</div>
+              ${grouped[year]
+                .map((a) => {
+                  const ownerBadge = getApptOwnerLabel(a);
+                  return `
+                  <div class="appt-list-item">
+                    <div style="min-width:0;flex:1;">
+                      <div style="font-weight:600;font-size:0.93rem;">${esc(formatHuDateFull(a.startIso))}</div>
+                      <div class="small muted">${esc(formatHuTimeRange(a.startIso, a.endIso))} · ${a.durationMin || 60} perc</div>
+                      ${a.title ? `<div class="small" style="margin-top:3px;font-weight:500;color:var(--text);">📝 ${esc(a.title)}</div>` : ''}
+                      ${ownerBadge ? `<div style="margin-top:4px;"><span class="badge">${esc(ownerBadge)}</span></div>` : ''}
+                    </div>
+                    <span class="badge badge-accent">${new Date(a.startIso).toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>`;
+                })
+                .join('')}
+            </div>`
+          )
+          .join('')}
+      `;
+      const exportAllBtn = $('#exportAllApptsIcsBtn');
+      if (exportAllBtn) {
+        exportAllBtn.addEventListener('click', () => downloadIcsForAppointments(allFuture, 'forfex-osszes-idopont.ics'));
+      }
     }
   }
 

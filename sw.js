@@ -7,7 +7,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'forfex-vip-v2.0.0';
+const CACHE_NAME = 'forfex-vip-v2.1.0';
 const APP_SHELL = [
   './',
   './index.html',
