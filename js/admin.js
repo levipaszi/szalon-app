@@ -383,7 +383,10 @@
           <div class="card">
             <div class="row-between">
               <span class="card-eyebrow">${slot.status === 'open' ? '⚡ Aktív Villám-időpont' : 'Lezárt Villám-időpont'}</span>
-              <span class="badge">${slot.durationMin} perc</span>
+              <div class="row-gap">
+                <span class="badge">${slot.durationMin} perc</span>
+                <button class="btn btn-sm btn-ghost" type="button" data-delete-flash="${slot.id}" title="Villám-időpont törlése">🗑 Törlés</button>
+              </div>
             </div>
             <h3 class="mt-1">${esc(dateText)}</h3>
             ${slot.note ? `<p class="small muted">${esc(slot.note)}</p>` : ''}
@@ -399,6 +402,15 @@
         const allIds = Object.keys(slot.applicants || {});
         await window.SalonService.approveFlashApplicant(slot.id, btn.dataset.winner, allIds);
         showToast('Vendég kiválasztva! A többi jelentkező kedves értesítést kapott.');
+      });
+    });
+
+    $$('[data-delete-flash]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const sid = btn.dataset.deleteFlash;
+        if (!window.confirm('Biztosan törlöd ezt a villám-időpont értesítést?')) return;
+        await window.SalonService.deleteFlashSlot(sid);
+        showToast('Villám-időpont törölve!');
       });
     });
   }
@@ -427,6 +439,7 @@
                 <div class="row-gap mt-1">
                   <input class="input" style="flex:1;" type="text" id="pairInput_${g.id}" value="${esc(g.name)}" placeholder="Google Naptár kulcsszó" />
                   <button class="btn btn-primary btn-sm" type="button" data-pair-guest="${g.id}">Párosítás</button>
+                  <button class="btn btn-ghost btn-sm" type="button" data-delete-guest="${g.id}" data-delete-name="${esc(g.name)}" title="Vendég törlése">🗑</button>
                 </div>
               </div>`
             )
@@ -482,7 +495,10 @@
                           <option value="female-dark" ${g.theme === 'female-dark' ? 'selected' : ''}>Női (Sötét Bársony)</option>
                         </select>
                       </div>
-                      <button class="btn btn-primary btn-block" type="button" data-save-guest="${g.id}">Mentés</button>
+                      <div class="row-gap">
+                        <button class="btn btn-primary" style="flex:1;" type="button" data-save-guest="${g.id}">Mentés</button>
+                        <button class="btn btn-danger" type="button" data-delete-guest="${g.id}" data-delete-name="${esc(g.name)}">🗑 Törlés</button>
+                      </div>
                     </div>
                   </div>`
                 )
@@ -516,6 +532,18 @@
           gender: theme === 'male' ? 'male' : 'female'
         });
         showToast('Vendég adatai frissítve!');
+      });
+    });
+
+    $$('[data-delete-guest]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const gid = btn.dataset.deleteGuest;
+        const gname = btn.dataset.deleteName || 'ezt a vendéget';
+        if (!window.confirm(`Biztosan törlöd ${gname} profilját és a hozzá tartozó szinkronizált időpontokat az alkalmazásból? (A Google Naptáradból semmi nem törlődik!)`)) {
+          return;
+        }
+        await window.SalonService.deleteGuest(gid);
+        showToast(`Vendég törölve: ${gname}`);
       });
     });
   }

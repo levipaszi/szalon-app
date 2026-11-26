@@ -446,6 +446,25 @@
     await db.collection('guests').doc(guestId).set(patch, { merge: true });
   }
 
+  async function deleteGuest(guestId) {
+    if (demoMode) {
+      const state = loadDemoDB();
+      delete state.guests[guestId];
+      Object.keys(state.appointments).forEach((aid) => {
+        if (state.appointments[aid].guestId === guestId) delete state.appointments[aid];
+      });
+      saveDemoDB(state);
+      return;
+    }
+    await db.collection('guests').doc(guestId).delete();
+    try {
+      const appts = await db.collection('appointments').where('guestId', '==', guestId).get();
+      const batch = db.batch();
+      appts.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    } catch (_) {}
+  }
+
   function subscribeGuest(guestId, cb) {
     if (demoMode) {
       return subscribeDemo((state) => cb(state.guests[guestId] || null));
@@ -752,6 +771,16 @@
     }
   }
 
+  async function deleteFlashSlot(slotId) {
+    if (demoMode) {
+      const state = loadDemoDB();
+      delete state.flashSlots[slotId];
+      saveDemoDB(state);
+      return;
+    }
+    await db.collection('flashSlots').doc(slotId).delete();
+  }
+
   // ---------------- ADMIN BEÁLLÍTÁSOK & PIN ----------------
   async function getAdminConfig() {
     if (demoMode) {
@@ -798,6 +827,7 @@
     createGuest,
     getGuest,
     updateGuest,
+    deleteGuest,
     subscribeGuest,
     subscribeAllGuests,
     subscribeGuestAppointments,
@@ -813,6 +843,7 @@
     subscribeFlashSlots,
     applyToFlashSlot,
     approveFlashApplicant,
+    deleteFlashSlot,
     getAdminConfig,
     saveAdminPinHash,
     saveAdminFcmToken
