@@ -354,6 +354,64 @@
     }
   }
 
+  // ---------------- TELEFON VISSZA GOMB (NATÍV PWA NAVIGÁCIÓ) ----------------
+  function initBackHandler({ onBack, onExitHint }) {
+    if (!window.history || !window.history.pushState) return { pushStep: () => {} };
+
+    let lastExitPromptAt = 0;
+
+    // Alap védőréteg a böngésző history-ban, hogy a Vissza gomb ne lépjen ki azonnal az appból
+    try {
+      window.history.replaceState({ forfexRoot: true }, '');
+      window.history.pushState({ forfexGuard: true }, '');
+    } catch (_) {}
+
+    function rearmGuard() {
+      try {
+        window.history.pushState({ forfexGuard: true }, '');
+      } catch (_) {}
+    }
+
+    window.addEventListener('popstate', () => {
+      // 1. Ha van nyitva sürgős felugró riasztás ablak, azt zárjuk be először
+      const att = document.getElementById('pwaAttentionOverlay');
+      if (att) {
+        att.remove();
+        rearmGuard();
+        return;
+      }
+
+      // 2. Alkalmazás-specifikus visszalépés (chat bezárás, modál bezárás, fül váltás, varázsló vissza)
+      const handled = typeof onBack === 'function' ? onBack() : false;
+      if (handled) {
+        rearmGuard();
+        return;
+      }
+
+      // 3. Főoldalon vagyunk, nincs nyitva semmi: dupla Vissza gomb a kilépéshez (natív app élmény)
+      const now = Date.now();
+      if (now - lastExitPromptAt < 2200) {
+        // Második megnyomás 2.2 mp-en belül -> engedjük kilépni
+        window.history.back();
+      } else {
+        lastExitPromptAt = now;
+        rearmGuard();
+        if (typeof onExitHint === 'function') {
+          onExitHint('Nyomd meg még egyszer a Vissza gombot a kilépéshez');
+        }
+      }
+    });
+
+    return {
+      pushStep: () => {
+        // Biztosítjuk, hogy nyitott al-nézetnél mindig legyen aktív őrszem a history tetején
+        if (!window.history.state || !window.history.state.forfexGuard) {
+          rearmGuard();
+        }
+      }
+    };
+  }
+
   global.PwaUX = {
     isStandalone,
     playTone,
@@ -361,6 +419,7 @@
     showAttentionAlert,
     renderUrgentStack,
     setNavBadge,
-    initInstallPrompt
+    initInstallPrompt,
+    initBackHandler
   };
 })(window);

@@ -2109,6 +2109,32 @@
     bindEvents();
     updateBioSettingsUI();
 
+    if (window.PwaUX && window.PwaUX.initBackHandler) {
+      window.PwaUX.initBackHandler({
+        onBack: () => {
+          // 1. Nyitott Chat ablak bezárása
+          if (state.activeChatGuestId || !$('#adminChatModal').classList.contains('hidden')) {
+            $('#adminChatModal').classList.add('hidden');
+            state.activeChatGuestId = null;
+            return true;
+          }
+          // 2. Nyitott Emlékeztető ablak bezárása
+          if (!$('#reminderModal').classList.contains('hidden')) {
+            $('#reminderModal').classList.add('hidden');
+            return true;
+          }
+          // 3. Ha másik fülön vagyunk (pl. Vendégek, Villám & SOS, Beállítások) -> vissza a Naptárra
+          const activeSec = document.querySelector('.tab-section.active');
+          if (activeSec && activeSec.id !== 'admin-tab-calendar') {
+            switchAdminTab('calendar');
+            return true;
+          }
+          return false;
+        },
+        onExitHint: (msg) => showToast(msg)
+      });
+    }
+
     // Gyors indulás gyorsítótárazott PIN hash-sel (0ms várakozás), háttérben frissítve
     const cachedPinHash = localStorage.getItem(PIN_CACHE_KEY) || '';
     if (cachedPinHash) {

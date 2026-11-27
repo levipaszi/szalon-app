@@ -1792,6 +1792,44 @@
     setupDisclosures();
     bindEvents();
 
+    if (window.PwaUX && window.PwaUX.initBackHandler) {
+      window.PwaUX.initBackHandler({
+        onBack: () => {
+          // 1. Nyitott Stílus/Profil modál bezárása
+          if (!$('#themeModal').classList.contains('hidden')) {
+            $('#themeModal').classList.add('hidden');
+            return true;
+          }
+          // 2. Nyitott chat panel bezárása
+          if (state.chatOpen) {
+            openGuestChat(false);
+            return true;
+          }
+          // 3. Nyitott SOS űrlap bezárása
+          const sosPanel = $('#sosPanel');
+          if (sosPanel && !sosPanel.classList.contains('hidden')) {
+            sosPanel.classList.add('hidden');
+            return true;
+          }
+          // 4. Hajápolási varázslóban 1 lépést vissza
+          const activeSec = document.querySelector('.tab-section.active');
+          if (activeSec && activeSec.id === 'tab-haircare' && state.wizard.active) {
+            if (state.wizard.step > 0) state.wizard.step--;
+            else state.wizard.active = false;
+            renderHaircare();
+            return true;
+          }
+          // 5. Ha másik fülön vagyunk -> vissza a Főoldalra
+          if (activeSec && activeSec.id !== 'tab-home') {
+            switchTab('home');
+            return true;
+          }
+          return false;
+        },
+        onExitHint: (msg) => showToast(msg)
+      });
+    }
+
     if (window.location.hash === '#appointments') {
       switchTab('appointments');
     }
