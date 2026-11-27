@@ -26,10 +26,12 @@
     guestSearchQuery: '',
     familySearchQuery: '',
     selectedFamilyIds: new Set(),
+    openGuestIds: new Set(),
     contact: {
       phoneRaw: window.APP_CONFIG.SOS_PHONE_RAW,
       phoneDisplay: window.APP_CONFIG.SOS_PHONE_DISPLAY,
-      messengerHandle: ''
+      messengerHandle: '',
+      messengerNumericId: ''
     }
   };
 
@@ -1029,7 +1031,7 @@
         <div class="card card-accent">
           <div class="card-eyebrow">Párosításra vár (${pending.length})</div>
           <h2 class="card-title">Új regisztrált vendégek</h2>
-          <p class="small muted mt-1">Írd be a vendég Google Naptárban használt nevét/kulcsszavát (pl. „Kovács Anna”), hogy az időpontjai élőben szinkronizáljanak.</p>
+          <p class="small muted mt-1">Írd be a vendég Google Naptárban használt pontos nevét (vesszővel több név is megadható, pl. „Kovács Zsófi, Zsó”). Csak a teljes, külön írt név egyezik (a „Zsó” nem kapja meg a „Zsolti” időpontokat!).</p>
           ${pending
             .map(
               (g) => `
@@ -1039,7 +1041,7 @@
                   <span class="badge ${g.gender === 'male' ? 'badge-male' : 'badge-female'}">${g.gender === 'male' ? 'Férfi' : 'Női'}</span>
                 </div>
                 <div class="row-gap mt-1">
-                  <input class="input" style="flex:1;" type="text" id="pairInput_${g.id}" value="${esc(g.name)}" placeholder="Google Naptár kulcsszó" />
+                  <input class="input" style="flex:1;" type="text" id="pairInput_${g.id}" value="${esc(g.name)}" placeholder="Pl. Kovács Zsófi, Zsó" />
                   <button class="btn btn-primary btn-sm" type="button" data-pair-guest="${g.id}">Párosítás</button>
                   <button class="btn btn-secondary btn-sm" type="button" data-open-chat="${g.id}" title="Üzenetváltás">💬${Number(g.unreadForAdmin) > 0 ? ' ' + g.unreadForAdmin : ''}</button>
                   <button class="btn btn-ghost btn-sm" type="button" data-delete-guest="${g.id}" data-delete-name="${esc(g.name)}" title="Vendég törlése">🗑</button>
@@ -1052,31 +1054,95 @@
       pendingEl.innerHTML = '';
     }
 
+    const now = new Date();
+    const apptsByGuest = {};
+    state.appointments.forEach((a) => {
+      if (!apptsByGuest[a.guestId]) apptsByGuest[a.guestId] = [];
+      apptsByGuest[a.guestId].push(a);
+    });
+
     const allEl = $('#adminAllGuests');
     allEl.innerHTML = `
       <div class="card">
         <div class="card-eyebrow">Párosított vendégkör (${paired.length})</div>
-        <h2 class="card-title">Vendégbeállítások</h2>
+        <h2 class="card-title">Vendégbeállítások &amp; Időpontjaik</h2>
         ${
           !paired.length
             ? '<p class="muted small mt-1">Még nincs párosított vendég.</p>'
             : paired
-                .map(
-                  (g) => `
-                  <div class="disclosure" id="guestEdit_${g.id}">
-                    <button class="disclosure-trigger" type="button" data-disclosure="guestEdit_${g.id}">
+                .map((g) => {
+                  const gAppts = (apptsByGuest[g.id] || []).slice().sort((a, b) => new Date(a.startIso) - new Date(b.startIso));
+                  const futureAppts = gAppts.filter((a) => new Date(a.endIso || a.startIso) >= now);
+                  const pastAppts = gAppts.filter((a) => new Date(a.endIso || a.startIso) < now).slice(-5).reverse();
+                  const kwTags = String(g.calendarKeyword || g.name || '')
+                    .split(/[,;\n]+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  const isOpen = state.openGuestIds.has(g.id);
+
+                  const futureRowsHtml = !futureAppts.length
+                    ? '<p class="small muted">Jelenleg nincs beírt jövőbeli időpontja.</p>'
+                    : futureAppts
+                        .map((a) => {
+                          const rsvpTxt = a.attendanceStatus === 'confirmed'
+                            ? ' ✅'
+                            : a.attendanceStatus === 'cancelled'
+                              ? ' ❌'
+                              : '';
+                          return `
+                            <div class="appt-list-item mt-1">
+                              <div style="min-width:0;flex:1;">
+                                <div style="font-weight:600;font-size:0.88rem;">${esc(formatHuDateFull(a.startIso))}${rsvpTxt}</div>
+                                <div class="small muted">${esc(formatTimeRange(a.startIso, a.endIso))} · ${a.durationMin || 60} perc</div>
+                                ${a.title ? `<div class="small" style="margin-top:2px;">📝 ${esc(a.title)}</div>` : ''}
+                              </div>
+                              <button class="btn btn-sm btn-secondary" type="button" data-guest-rem="${a.id}" title="Emlékeztető küldése">🔔</button>
+                            </div>`;
+                        })
+                        .join('');
+
+                  const pastRowsHtml = pastAppts.length
+                    ? `
+                      <div class="mt-2">
+                        <span class="form-label">Legutóbbi látogatások (${pastAppts.length})</span>
+                        ${pastAppts
+                          .map(
+                            (a) => `
+                            <div class="small muted" style="padding:4px 0;border-bottom:1px solid var(--border);">
+                              ${esc(formatHuDateFull(a.startIso))} (${esc(formatTimeRange(a.startIso, a.endIso))})${a.title ? ' – ' + esc(a.title) : ''}
+                            </div>`
+                          )
+                          .join('')}
+                      </div>`
+                    : '';
+
+                  return `
+                  <div class="disclosure ${isOpen ? 'open' : ''}" id="guestEdit_${g.id}">
+                    <button class="disclosure-trigger" type="button" data-disclosure="guestEdit_${g.id}" data-track-guest-open="${g.id}">
                       <span class="row-gap">
                         <span class="badge ${g.gender === 'male' ? 'badge-male' : 'badge-female'}">${g.gender === 'male' ? 'Férfi' : 'Női'}</span>
                         <span>${esc(g.name)}</span>
+                        <span class="badge">📅 ${futureAppts.length}</span>
                         ${g.familyGroupId ? `<span class="badge badge-accent">👨‍👩‍👧 ${esc(g.familyGroupName || 'Család')}</span>` : ''}
                         ${Number(g.unreadForAdmin) > 0 ? `<span class="badge badge-danger">💬 ${g.unreadForAdmin} új</span>` : ''}
                       </span>
                       <span class="disclosure-chevron">▾</span>
                     </button>
                     <div class="disclosure-body">
-                      <div class="form-group">
-                        <label class="form-label">Google Naptár kulcsszó</label>
-                        <input class="input" type="text" id="gKey_${g.id}" value="${esc(g.calendarKeyword || g.name)}" />
+                      <!-- Vendég beírt időpontjai -->
+                      <div class="protocol-step" style="padding-top:0;">
+                        <div class="protocol-step-title">📅 Beírt jövőbeli időpontjai (${futureAppts.length})</div>
+                        ${futureRowsHtml}
+                        ${pastRowsHtml}
+                      </div>
+
+                      <div class="form-group mt-2">
+                        <label class="form-label">Google Naptár nevek / kulcsszavak (vesszővel több is megadható!)</label>
+                        <input class="input" type="text" id="gKey_${g.id}" value="${esc(g.calendarKeyword || g.name)}" placeholder="Pl. Kovács Zsófi, Zsó, Zsófi + fia" />
+                        <div class="chip-row mt-1">
+                          ${kwTags.map((k) => `<span class="badge badge-accent">🏷️ ${esc(k)}</span>`).join('')}
+                        </div>
+                        <p class="small muted mt-1">Csak pontos, különálló szóként egyező nevekre szűr (a „Zsó” nem kapja meg a „Zsolti” időpontokat).</p>
                       </div>
                       <div class="row-gap">
                         <div class="form-group" style="flex:1;">
@@ -1101,16 +1167,37 @@
                         </select>
                       </div>
                       <div class="row-gap">
-                        <button class="btn btn-primary" style="flex:1;" type="button" data-save-guest="${g.id}">Mentés</button>
+                        <button class="btn btn-primary" style="flex:1;" type="button" data-save-guest="${g.id}">Mentés &amp; Szinkron</button>
                         <button class="btn btn-secondary" type="button" data-open-chat="${g.id}">💬 Üzenet${Number(g.unreadForAdmin) > 0 ? ` (${g.unreadForAdmin})` : ''}</button>
                         <button class="btn btn-danger" type="button" data-delete-guest="${g.id}" data-delete-name="${esc(g.name)}">🗑</button>
                       </div>
                     </div>
-                  </div>`
-                )
+                  </div>`;
+                })
                 .join('')
         }
       </div>`;
+
+    $$('[data-track-guest-open]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const gid = btn.dataset.trackGuestOpen;
+        if (state.openGuestIds.has(gid)) state.openGuestIds.delete(gid);
+        else state.openGuestIds.add(gid);
+      });
+    });
+
+    const gMapLocal = guestMap();
+    $$('[data-guest-rem]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const appt = state.appointments.find((a) => a.id === btn.dataset.guestRem);
+        if (!appt) return;
+        const g = gMapLocal[appt.guestId] || {};
+        state.reminderTarget = { appt, guest: g };
+        $('#reminderTargetInfo').textContent = `${g.name || appt.title} – ${formatHuDateFull(appt.startIso)} (${formatTimeRange(appt.startIso, appt.endIso)})`;
+        $('#reminderCustomMsg').value = '';
+        $('#reminderModal').classList.remove('hidden');
+      });
+    });
 
     $$('[data-pair-guest]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -1120,7 +1207,8 @@
           showToast('Add meg a naptár kulcsszót!');
           return;
         }
-        await window.SalonService.updateGuest(gid, { calendarKeyword: kw, paired: true });
+        const kwArr = kw.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+        await window.SalonService.updateGuest(gid, { calendarKeyword: kw, calendarKeywords: kwArr, paired: true });
         showToast(`Párosítva: ${kw}! Naptár szinkronizálása...`);
         window.SalonService.triggerCalendarSync();
       });
@@ -1130,14 +1218,18 @@
       btn.addEventListener('click', async () => {
         const gid = btn.dataset.saveGuest;
         const theme = $(`#gTheme_${gid}`).value;
+        const rawKw = $(`#gKey_${gid}`).value.trim();
+        const kwArr = rawKw.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
         await window.SalonService.updateGuest(gid, {
-          calendarKeyword: $(`#gKey_${gid}`).value.trim(),
+          calendarKeyword: rawKw,
+          calendarKeywords: kwArr,
           serviceDuration: Number($(`#gDur_${gid}`).value),
           cycleDays: Number($(`#gCyc_${gid}`).value) || 35,
           theme,
           gender: theme === 'male' ? 'male' : 'female'
         });
-        showToast('Vendég adatai frissítve!');
+        showToast('Vendég adatai és kulcsszavai mentve! Naptár szinkronizálása...');
+        window.SalonService.triggerCalendarSync();
       });
     });
 
@@ -1506,14 +1598,16 @@
     $('#saveContactSettingsBtn').addEventListener('click', async () => {
       const phoneDisp = ($('#adminContactPhoneInput').value || '').trim();
       const messengerRaw = ($('#adminMessengerInput').value || '').trim();
+      const iosIdRaw = ($('#adminMessengerIosIdInput').value || '').replace(/\D/g, '').trim();
       const normalized = normalizeMessengerUrl(messengerRaw);
       await window.SalonService.saveContactSettings({
         phoneRaw: phoneDisp.replace(/[^+\d]/g, '') || window.APP_CONFIG.SOS_PHONE_RAW,
         phoneDisplay: phoneDisp || window.APP_CONFIG.SOS_PHONE_DISPLAY,
-        messengerHandle: normalized || messengerRaw
+        messengerHandle: normalized || messengerRaw,
+        messengerNumericId: iosIdRaw
       });
       updateMessengerPreview();
-      showToast('Telefonszám és Messenger link elmentve!');
+      showToast('Telefonszám és Messenger beállítások elmentve!');
     });
 
     // Extra emlékeztető modál
@@ -1834,8 +1928,10 @@
       state.contact = contact;
       const pInp = $('#adminContactPhoneInput');
       const mInp = $('#adminMessengerInput');
+      const iosInp = $('#adminMessengerIosIdInput');
       if (pInp && document.activeElement !== pInp) pInp.value = contact.phoneDisplay || '';
       if (mInp && document.activeElement !== mInp) mInp.value = contact.messengerHandle || '';
+      if (iosInp && document.activeElement !== iosInp) iosInp.value = contact.messengerNumericId || '';
       const prev = $('#adminMessengerPreview');
       if (prev && contact.messengerHandle) {
         prev.innerHTML = `Aktív vendég link: <a href="${esc(contact.messengerHandle)}" target="_blank" rel="noopener">${esc(contact.messengerHandle)} ↗</a>`;
@@ -1889,6 +1985,7 @@
       apptsLoaded = true;
       state.appointments = appts;
       renderCalendar();
+      renderGuests();
       renderAdminUrgentAlerts();
     });
 

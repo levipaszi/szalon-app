@@ -282,7 +282,17 @@
 
   async function getUnifiedSwRegistration() {
     if (!('serviceWorker' in navigator)) return null;
-    const reg = await navigator.serviceWorker.register('./sw.js');
+    // Régi ütköző firebase-messaging-sw.js regisztrációk kitakarítása (pl. Samsung Internet / régi telepítés!)
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) {
+        const scriptUrl = (r.active && r.active.scriptURL) || (r.waiting && r.waiting.scriptURL) || (r.installing && r.installing.scriptURL) || '';
+        if (scriptUrl.includes('firebase-messaging-sw.js')) {
+          await r.unregister();
+        }
+      }
+    } catch (_) {}
+    const reg = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
     await navigator.serviceWorker.ready;
     return reg;
   }
@@ -330,21 +340,36 @@
   }
 
   async function requestPushPermission(role, guestId) {
-    if (typeof Notification === 'undefined') {
-      const isIosDevice = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const ua = navigator.userAgent || '';
+    const isIosDevice = /iphone|ipad|ipod/i.test(ua);
+    const isSamsung = /samsungbrowser/i.test(ua);
+
+    if (typeof Notification === 'undefined' || !('PushManager' in window)) {
       return {
         ok: false,
         reason: isIosDevice
           ? 'iPhone-on előbb add hozzá az appot a Főképernyőhöz (Megosztás -> Főképernyőhöz adás), és onnan nyisd meg!'
-          : 'Ez a böngésző nem támogatja a háttér push értesítéseket.'
+          : isSamsung
+            ? 'A Samsung Internet régebbi verziójában nincs bekapcsolva a Web Push – frissítsd, vagy nyisd meg Google Chrome-ból!'
+            : 'Ez a böngésző nem támogatja a háttér push értesítéseket (próbáld Google Chrome-ból).'
       };
     }
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') {
-      return { ok: false, reason: 'Az értesítési engedély tiltva van a telefonod böngészőjében.' };
+      return {
+        ok: false,
+        reason: isSamsung
+          ? 'Samsung böngészőben engedélyezd az értesítéseket: Menü (☰) → Beállítások → Webhelyek és letöltések → Értesítések!'
+          : 'Az értesítési engedély tiltva van a telefonod böngészőjében.'
+      };
     }
     if (demoMode || !messaging) {
-      return { ok: true, demo: true, token: 'demo_token' };
+      return {
+        ok: false,
+        reason: isSamsung
+          ? 'A Samsung Internet blokkolta a háttér értesítést – telepítsd át Google Chrome-ból a biztos push értesítésekért!'
+          : 'A push szolgáltatás nem indult el ezen a böngészőn.'
+      };
     }
     return syncPushTokenIfGranted(role, guestId);
   }
@@ -1033,7 +1058,8 @@
     return {
       phoneRaw: (global.APP_CONFIG && global.APP_CONFIG.SOS_PHONE_RAW) || '+36702155375',
       phoneDisplay: (global.APP_CONFIG && global.APP_CONFIG.SOS_PHONE_DISPLAY) || '+36 70 215 5375',
-      messengerHandle: ''
+      messengerHandle: '',
+      messengerNumericId: ''
     };
   }
 
@@ -1051,7 +1077,8 @@
     const clean = {
       phoneRaw: String(contact.phoneRaw || '').replace(/[^+\d]/g, '') || '+36702155375',
       phoneDisplay: String(contact.phoneDisplay || contact.phoneRaw || '+36 70 215 5375').trim(),
-      messengerHandle: String(contact.messengerHandle || '').trim()
+      messengerHandle: String(contact.messengerHandle || '').trim(),
+      messengerNumericId: String(contact.messengerNumericId || '').replace(/\D/g, '').trim()
     };
     if (demoMode) {
       const state = loadDemoDB();

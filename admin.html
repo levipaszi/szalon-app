@@ -199,9 +199,14 @@
           <input class="input" type="tel" id="adminContactPhoneInput" placeholder="+36 70 215 5375" />
         </div>
         <div class="form-group">
-          <label class="form-label" for="adminMessengerInput">Messenger felhasználónév vagy m.me / Facebook link</label>
+          <label class="form-label" for="adminMessengerInput">Messenger felhasználónév vagy m.me / Facebook link (Android + Web)</label>
           <input class="input" type="text" id="adminMessengerInput" placeholder="Pl. forfexfodraszat vagy m.me/forfexfodraszat" />
           <p class="small muted mt-1" id="adminMessengerPreview"></p>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="adminMessengerIosIdInput">iPhone Messenger számos ID (opcionális – közvetlen iOS beszélgetéshez!)</label>
+          <input class="input" type="text" inputmode="numeric" id="adminMessengerIosIdInput" placeholder="Pl. 100001234567890 (csak számjegyek)" />
+          <p class="small muted mt-1">Ha megadod a Facebook profilod számos ID-ját, iPhone-on egyből a veled való beszélgetésbe lép be a Messenger app!</p>
         </div>
         <button class="btn btn-primary btn-block" id="saveContactSettingsBtn" type="button">
           💾 Elérhetőségek mentése
@@ -395,10 +400,10 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
-  <script src="./js/config.js?v=22"></script>
-  <script src="./js/firebase-service.js?v=22"></script>
-  <script src="./js/pwa-ux.js?v=22"></script>
-  <script src="./js/qrcode-gen.js?v=22"></script>
-  <script src="./js/admin.js?v=22"></script>
+  <script src="./js/config.js?v=23"></script>
+  <script src="./js/firebase-service.js?v=23"></script>
+  <script src="./js/pwa-ux.js?v=23"></script>
+  <script src="./js/qrcode-gen.js?v=23"></script>
+  <script src="./js/admin.js?v=23"></script>
 </body>
 </html>

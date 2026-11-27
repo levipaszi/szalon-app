@@ -972,34 +972,39 @@
     return `https://m.me/${handle}`;
   }
 
-  // iOS-en a sima m.me link PWA-ból az App Store-ba dobja a felhasználót akkor is, ha fenn van a Messenger!
-  // Ez a függvény iOS-en közvetlenül a natív fb-messenger:// protokollal indítja el a Messenger appot.
+  // iOS-en a Messenger alkalmazás KÖZVETLENÜL a konkrét beszélgetést kizárólag a számos Facebook ID-val
+  // (fb-messenger://user-thread/<SZÁM>) nyitja meg. Ha nincs megadva számos ID, a messenger.com/t/<felhasználónév>
+  // Universal Linkkel nyitjuk (nem az elavult fb-messenger://user/ sémával, ami csak a főoldalra dob!).
   function openMessengerSmart(event) {
-    const handle = extractMessengerHandle(state.contact && state.contact.messengerHandle);
-    if (!handle) return;
+    const c = state.contact || {};
+    const handle = extractMessengerHandle(c.messengerHandle);
+    const numericId = String(c.messengerNumericId || '').replace(/\D/g, '') || (/^\d+$/.test(handle) ? handle : '');
+    if (!handle && !numericId) return;
+
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
     if (!isIos) return; // Androidon és asztalin az m.me link hibátlanul nyitja!
 
     event.preventDefault();
-    const isNumericId = /^\d+$/.test(handle);
-    const nativeUrl = isNumericId
-      ? `fb-messenger://user-thread/${handle}`
-      : `fb-messenger://user/${handle}`;
-    const webFallback = `https://www.messenger.com/t/${handle}`;
+    const webThreadUrl = `https://www.messenger.com/t/${handle || numericId}`;
 
-    let leftApp = false;
-    const onVis = () => {
-      if (document.visibilityState === 'hidden') leftApp = true;
-    };
-    document.addEventListener('visibilitychange', onVis);
-    window.location.href = nativeUrl;
+    if (numericId) {
+      const nativeThreadUrl = `fb-messenger://user-thread/${numericId}`;
+      let leftApp = false;
+      const onVis = () => {
+        if (document.visibilityState === 'hidden') leftApp = true;
+      };
+      document.addEventListener('visibilitychange', onVis);
+      window.location.href = nativeThreadUrl;
 
-    setTimeout(() => {
-      document.removeEventListener('visibilitychange', onVis);
-      if (!leftApp && document.visibilityState === 'visible') {
-        window.location.href = webFallback;
-      }
-    }, 1300);
+      setTimeout(() => {
+        document.removeEventListener('visibilitychange', onVis);
+        if (!leftApp && document.visibilityState === 'visible') {
+          window.location.href = webThreadUrl;
+        }
+      }, 1300);
+    } else {
+      window.location.href = webThreadUrl;
+    }
   }
 
   function openGuestChat(forceOpen) {
@@ -1256,18 +1261,46 @@
       });
     });
 
-    // Push gombok
+    // Push gombok + 5 mp-es háttér teszt
+    const updateGuestPushStatusUI = (text) => {
+      const el = $('#guestPushStatusText');
+      if (el) el.textContent = `Értesítések állapota: ${text}`;
+    };
+    state.updateGuestPushStatusUI = updateGuestPushStatusUI;
+
     const handleEnablePush = async () => {
       const res = await window.SalonService.requestPushPermission('guest', state.guestId);
       if (res.ok) {
         $('#pushBanner').classList.add('hidden');
-        showToast('Értesítések bekapcsolva!');
+        updateGuestPushStatusUI('Aktív ezen a telefonon ✅');
+        showToast('Értesítések bekapcsolva és regisztrálva!');
       } else {
+        updateGuestPushStatusUI(res.reason || 'Nincs engedélyezve');
         showToast(res.reason || 'Nem sikerült bekapcsolni az értesítéseket.');
       }
     };
     $('#enablePushBtn').addEventListener('click', handleEnablePush);
     $('#modalPushBtn').addEventListener('click', handleEnablePush);
+
+    const guestTestPushBtn = $('#guestTestPushBtn');
+    if (guestTestPushBtn) {
+      guestTestPushBtn.addEventListener('click', async () => {
+        const syncRes = await window.SalonService.syncPushTokenIfGranted('guest', state.guestId);
+        if (!syncRes.ok) {
+          showToast('Előbb kapcsold be a fenti „Push értesítések engedélyezése” gombot!');
+          return;
+        }
+        showToast('Teszt értesítés elindítva! Zárd be az appot – 5 mp múlva csörög!');
+        window.SalonService.sendPushNotification({
+          targetRole: 'guest',
+          guestId: state.guestId,
+          title: '🧪 Forfex VIP – Teszt értesítés',
+          body: 'Szuper! Zárt alkalmazásnál is megérkeznek az értesítések a telefonodra!',
+          url: './index.html',
+          delaySeconds: 5
+        });
+      });
+    }
 
     $('#modalRefreshCalendarBtn').addEventListener('click', async () => {
       showToast('Google Naptár szinkronizálása...');
@@ -1661,19 +1694,50 @@
       renderAppointmentsTab();
     });
 
-    // Push értesítés automatikus token-szinkron (ha már engedélyezve van) vagy felajánló
+    // Push értesítés automatikus token-szinkron (ha már engedélyezve van) vagy böngésző-specifikus segédlet
+    const setPushUI = state.updateGuestPushStatusUI || (() => {});
+    const isSamsungBrowser = /samsungbrowser/i.test(navigator.userAgent || '');
     if (typeof Notification !== 'undefined') {
       if (Notification.permission === 'granted') {
         $('#pushBanner').classList.add('hidden');
-        window.SalonService.syncPushTokenIfGranted('guest', state.guestId);
+        window.SalonService.syncPushTokenIfGranted('guest', state.guestId).then((r) => {
+          if (r && r.ok) {
+            setPushUI('Aktív ezen a telefonon ✅');
+          } else {
+            const msg = isSamsungBrowser
+              ? 'Samsung böngészőben akadozhat – nyisd meg Chrome-ból, vagy koppints az engedélyezésre!'
+              : (r && r.reason) || 'Koppints az engedélyezésre!';
+            setPushUI(msg);
+          }
+        });
       } else if (Notification.permission === 'default') {
         $('#pushBanner').classList.remove('hidden');
+        setPushUI('Még nincs bekapcsolva');
+      } else {
+        const pb = $('#pushBanner');
+        pb.innerHTML = isSamsungBrowser
+          ? '<span><strong>⚠️ Értesítések tiltva:</strong> Samsung böngészőben kapcsold be itt: Menü (☰) → Beállítások → Webhelyek → Értesítések (vagy használd Chrome-ból!).</span>'
+          : '<span><strong>⚠️ Értesítések tiltva:</strong> A böngésző/telefon beállításaiban engedélyezd az értesítéseket a Forfex VIP-nek!</span>';
+        pb.classList.remove('hidden');
+        setPushUI('Tiltva a böngésző beállításaiban ⚠️');
       }
     } else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
       const pb = $('#pushBanner');
       pb.innerHTML = '<span><strong>📲 iPhone tipp:</strong> A háttér értesítésekhez előbb add hozzá az appot a Főképernyőhöz (Megosztás ⬆️ → Főképernyőhöz adás ＋), és onnan nyisd meg!</span>';
       pb.classList.remove('hidden');
+      setPushUI('iPhone-on a Főképernyő ikonból indítva működik');
     }
+
+    // Ha a vendég visszatér az appba, frissítsük a tokent szükség esetén (max 1x / 30 perc)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const lastTok = Number(sessionStorage.getItem('forfex_tok_sync_ts') || 0);
+        if (Date.now() - lastTok > 30 * 60 * 1000) {
+          sessionStorage.setItem('forfex_tok_sync_ts', String(Date.now()));
+          window.SalonService.syncPushTokenIfGranted('guest', state.guestId);
+        }
+      }
+    });
 
     // Háttérben frissítsük a naptárat legfeljebb 10 percenként (gyorsabb indulás!)
     const lastSyncKey = 'forfex_last_cal_sync_v1';

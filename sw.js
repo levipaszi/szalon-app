@@ -7,7 +7,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'forfex-vip-v2.1.0';
+const CACHE_NAME = 'forfex-vip-v2.2.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -68,7 +68,7 @@ if (typeof firebase !== 'undefined' && FIREBASE_SW_CONFIG.apiKey) {
             ? 'atelier-flash'
             : 'atelier-notice-' + Date.now();
 
-      self.registration.showNotification(title, {
+      const opts = {
         body,
         icon,
         badge: icon,
@@ -77,9 +77,12 @@ if (typeof firebase !== 'undefined' && FIREBASE_SW_CONFIG.apiKey) {
         requireInteraction: true,
         silent: false,
         vibrate: isUrgent ? [320, 120, 320, 120, 500] : [200, 100, 200],
-        actions: [{ action: 'open', title: 'Megnyitás most' }],
         data: { url: targetUrl }
-      });
+      };
+      // Egyes böngészők (pl. régebbi Samsung Internet / iOS) elutasítják az actions mezőt -> biztonságos fallback
+      self.registration
+        .showNotification(title, Object.assign({}, opts, { actions: [{ action: 'open', title: 'Megnyitás most' }] }))
+        .catch(() => self.registration.showNotification(title, opts));
     });
   } catch (_) {}
 }
