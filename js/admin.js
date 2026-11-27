@@ -1116,6 +1116,11 @@
                       </div>`
                     : '';
 
+                  const tokenCount = Array.from(new Set([g.fcmToken].concat(Array.isArray(g.fcmTokens) ? g.fcmTokens : []).filter(Boolean))).length;
+                  const pushBadge = tokenCount > 0
+                    ? `<span class="badge badge-success" title="Háttér Push értesítés aktív">🔔 Push (${tokenCount})</span>`
+                    : `<span class="badge" title="Még nincs bekapcsolva a push értesítés ennél a vendégnél">🔕 Nincs push</span>`;
+
                   return `
                   <div class="disclosure ${isOpen ? 'open' : ''}" id="guestEdit_${g.id}">
                     <button class="disclosure-trigger" type="button" data-disclosure="guestEdit_${g.id}" data-track-guest-open="${g.id}">
@@ -1123,6 +1128,7 @@
                         <span class="badge ${g.gender === 'male' ? 'badge-male' : 'badge-female'}">${g.gender === 'male' ? 'Férfi' : 'Női'}</span>
                         <span>${esc(g.name)}</span>
                         <span class="badge">📅 ${futureAppts.length}</span>
+                        ${pushBadge}
                         ${g.familyGroupId ? `<span class="badge badge-accent">👨‍👩‍👧 ${esc(g.familyGroupName || 'Család')}</span>` : ''}
                         ${Number(g.unreadForAdmin) > 0 ? `<span class="badge badge-danger">💬 ${g.unreadForAdmin} új</span>` : ''}
                       </span>
@@ -1254,7 +1260,8 @@
     const g = state.guests.find((x) => x.id === guestId);
     if (!g) return;
     state.activeChatGuestId = guestId;
-    $('#adminChatTitle').textContent = `💬 ${g.name}`;
+    const hasPush = !!(g.fcmToken || (Array.isArray(g.fcmTokens) && g.fcmTokens.length));
+    $('#adminChatTitle').textContent = `💬 ${g.name} ${hasPush ? '🔔' : '🔕'}`;
     $('#adminChatModal').classList.remove('hidden');
     renderAdminChatThread();
     if (Number(g.unreadForAdmin) > 0) {
